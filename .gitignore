@@ -1,0 +1,7 @@
+*.o
+*.pyc
+*.depend
+Inference_pytorch/log/*
+Inference_pytorch/NeuroSIM/main
+Inference_pytorch/layer_record_*
+
