@@ -87,5 +87,14 @@
 #define	ROW_MODE	0	// Connect to rows
 #define	COL_MODE	1	// Connect to columns
 
+// netstructure based on the columns of the .csv file
+#define IFM_LENGTH 0
+#define IFM_WIDTH 1
+#define IFM_CHANNEL_DEPTH 2
+#define KERNEL_LENGTH 3
+#define KERNEL_WIDTH 4
+#define KERNEL_DEPTH 5
+#define HAS_POOLING 6
+
 #endif /* CONSTANT_H_ */
 

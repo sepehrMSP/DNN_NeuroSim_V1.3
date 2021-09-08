@@ -58,15 +58,15 @@
 
 using namespace std;
 
-vector<vector<double> > getNetStructure(const string &inputfile);
+vector<vector<double>> getNetStructure(const string &inputfile);
 
-int main(int argc, char * argv[]) {   
+int main(int argc, char* argv[]) {   
 
 	auto start = chrono::high_resolution_clock::now();
 	
 	gen.seed(0);
 	
-	vector<vector<double> > netStructure;
+	vector<vector<double>> netStructure;
 	netStructure = getNetStructure(argv[1]);
 	
 	// define weight/input/memory precision from wrapper
@@ -117,10 +117,10 @@ int main(int argc, char * argv[]) {
 	double desiredNumTileNM, desiredPESizeNM, desiredNumTileCM, desiredTileSizeCM, desiredPESizeCM;
 	int numTileRow, numTileCol;
 	
-	vector<vector<double> > numTileEachLayer;
-	vector<vector<double> > utilizationEachLayer;
-	vector<vector<double> > speedUpEachLayer;
-	vector<vector<double> > tileLocaEachLayer;
+	vector<vector<double>> numTileEachLayer;
+	vector<vector<double>> utilizationEachLayer;
+	vector<vector<double>> speedUpEachLayer;
+	vector<vector<double>> tileLocaEachLayer;
 	
 	numTileEachLayer = ChipFloorPlan(true, false, false, netStructure, markNM, 
 					maxPESizeNM, maxTileSizeCM, numPENM, pipelineSpeedUp,
@@ -154,7 +154,7 @@ int main(int argc, char * argv[]) {
 	cout << endl;
 	cout << "----------------- # of tile used for each layer -----------------" <<  endl;
 	double totalNumTile = 0;
-	for (int i=0; i<netStructure.size(); i++) {
+	for (int i = 0; i < netStructure.size(); i ++) {
 		cout << "layer" << i+1 << ": " << numTileEachLayer[0][i] * numTileEachLayer[1][i] << endl;
 		totalNumTile += numTileEachLayer[0][i] * numTileEachLayer[1][i];
 	}
@@ -180,8 +180,9 @@ int main(int argc, char * argv[]) {
 	cout << endl;
 	
 	double numComputation = 0;
-	for (int i=0; i<netStructure.size(); i++) {
-		numComputation += 2*(netStructure[i][0] * netStructure[i][1] * netStructure[i][2] * netStructure[i][3] * netStructure[i][4] * netStructure[i][5]);
+	for (int i = 0; i < netStructure.size(); i ++) {
+		numComputation += 2 * netStructure[i][IFM_LENGTH] * netStructure[i][IFM_WIDTH] * netStructure[i][IFM_CHANNEL_DEPTH] *
+							netStructure[i][KERNEL_LENGTH] * netStructure[i][KERNEL_WIDTH] * netStructure[i][KERNEL_DEPTH];
 	}
 
 	ChipInitialize(inputParameter, tech, cell, netStructure, markNM, numTileEachLayer,
@@ -240,7 +241,7 @@ int main(int argc, char * argv[]) {
 	if (param->synchronous){
 		// calculate clkFreq
 		for (int i=0; i<netStructure.size(); i++) {		
-			ChipCalculatePerformance(inputParameter, tech, cell, i, argv[2*i+4], argv[2*i+4], argv[2*i+5], netStructure[i][6],
+			ChipCalculatePerformance(inputParameter, tech, cell, i, argv[2*i+4], argv[2*i+4], argv[2*i+5], netStructure[i][HAS_POOLING],
 						netStructure, markNM, numTileEachLayer, utilizationEachLayer, speedUpEachLayer, tileLocaEachLayer,
 						numPENM, desiredPESizeNM, desiredTileSizeCM, desiredPESizeCM, CMTileheight, CMTilewidth, NMTileheight, NMTilewidth,
 						&layerReadLatency, &layerReadDynamicEnergy, &tileLeakage, &layerbufferLatency, &layerbufferDynamicEnergy, &layericLatency, &layericDynamicEnergy,
@@ -261,7 +262,7 @@ int main(int argc, char * argv[]) {
 		for (int i=0; i<netStructure.size(); i++) {
 			cout << "-------------------- Estimation of Layer " << i+1 << " ----------------------" << endl;
 
-			ChipCalculatePerformance(inputParameter, tech, cell, i, argv[2*i+4], argv[2*i+4], argv[2*i+5], netStructure[i][6],
+			ChipCalculatePerformance(inputParameter, tech, cell, i, argv[2*i+4], argv[2*i+4], argv[2*i+5], netStructure[i][HAS_POOLING],
 						netStructure, markNM, numTileEachLayer, utilizationEachLayer, speedUpEachLayer, tileLocaEachLayer,
 						numPENM, desiredPESizeNM, desiredTileSizeCM, desiredPESizeCM, CMTileheight, CMTilewidth, NMTileheight, NMTilewidth,
 						&layerReadLatency, &layerReadDynamicEnergy, &tileLeakage, &layerbufferLatency, &layerbufferDynamicEnergy, &layericLatency, &layericDynamicEnergy,
@@ -344,7 +345,7 @@ int main(int argc, char * argv[]) {
 		vector<double> coreEnergyOtherPerLayer;
 		
 		for (int i=0; i<netStructure.size(); i++) {
-			ChipCalculatePerformance(inputParameter, tech, cell, i, argv[2*i+4], argv[2*i+4], argv[2*i+5], netStructure[i][6],
+			ChipCalculatePerformance(inputParameter, tech, cell, i, argv[2*i+4], argv[2*i+4], argv[2*i+5], netStructure[i][HAS_POOLING],
 						netStructure, markNM, numTileEachLayer, utilizationEachLayer, speedUpEachLayer, tileLocaEachLayer,
 						numPENM, desiredPESizeNM, desiredTileSizeCM, desiredPESizeCM, CMTileheight, CMTilewidth, NMTileheight, NMTilewidth,
 						&layerReadLatency, &layerReadDynamicEnergy, &tileLeakage, &layerbufferLatency, &layerbufferDynamicEnergy, &layericLatency, &layericDynamicEnergy,
@@ -497,44 +498,44 @@ int main(int argc, char * argv[]) {
 	return 0;
 }
 
-vector<vector<double> > getNetStructure(const string &inputfile) {
-	ifstream infile(inputfile.c_str());      
+vector<vector<double>> getNetStructure(const string &inputfile) {
+	ifstream infile(inputfile.c_str());
 	string inputline;
 	string inputval;
 	
-	int ROWin=0, COLin=0;      
-	if (!infile.good()) {        
+	int ROWin = 0, COLin = 0;
+	if (!infile.good()) {
 		cerr << "Error: the input file cannot be opened!" << endl;
 		exit(1);
-	}else{
-		while (getline(infile, inputline, '\n')) {       
-			ROWin++;                                
+	} else {
+		while (getline(infile, inputline, '\n')) {
+			ROWin ++;
 		}
 		infile.clear();
-		infile.seekg(0, ios::beg);      
-		if (getline(infile, inputline, '\n')) {        
-			istringstream iss (inputline);      
-			while (getline(iss, inputval, ',')) {       
-				COLin++;
+		infile.seekg(0, ios::beg);
+		if (getline(infile, inputline, '\n')) {
+			istringstream iss (inputline);
+			while (getline(iss, inputval, ',')) {
+				COLin ++;
 			}
-		}	
+		}
 	}
 	infile.clear();
-	infile.seekg(0, ios::beg);          
+	infile.seekg(0, ios::beg);
 
-	vector<vector<double> > netStructure;               
-	for (int row=0; row<ROWin; row++) {	
+	vector<vector<double>> netStructure;
+	for (int row = 0; row < ROWin; row ++) {
 		vector<double> netStructurerow;
-		getline(infile, inputline, '\n');             
+		getline(infile, inputline, '\n');
 		istringstream iss;
 		iss.str(inputline);
-		for (int col=0; col<COLin; col++) {       
-			while(getline(iss, inputval, ',')){	
+		for (int col = 0; col < COLin; col ++) {
+			while(getline(iss, inputval, ',')) {
 				istringstream fs;
 				fs.str(inputval);
-				double f=0;
-				fs >> f;				
-				netStructurerow.push_back(f);			
+				double f = 0;
+				fs >> f;
+				netStructurerow.push_back(f);
 			}			
 		}		
 		netStructure.push_back(netStructurerow);
@@ -543,7 +544,4 @@ vector<vector<double> > getNetStructure(const string &inputfile) {
 	
 	return netStructure;
 	netStructure.clear();
-}	
-
-
-
+}

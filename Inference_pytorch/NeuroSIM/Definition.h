@@ -47,4 +47,3 @@ std::mt19937 gen;
 InputParameter inputParameter;
 Technology tech;
 MemCell cell;
-
