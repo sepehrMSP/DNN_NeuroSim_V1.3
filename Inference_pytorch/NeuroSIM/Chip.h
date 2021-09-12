@@ -40,11 +40,12 @@
 #define CHIP_H_
 
 /*** Functions ***/
-vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell, bool pip, const vector<vector<double> > &netStructure,
-					double *maxPESizeNM, double *maxTileSizeCM, double *numPENM);
+void ChipDesignInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell);
 
 vector<int> getLayersMapping(const vector<vector<double>> &netStructure, double *maxPESizeNM,
 							 double *maxTileSizeCM, double *numPENM);
+
+vector<int> getLayersPipelineSpeedUp(const vector<vector<double>> &netStructure);
 
 vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bool findSpeedUp, const vector<vector<double> > &netStructure, const vector<int > &markNM,
 					double maxPESizeNM, double maxTileSizeCM, double numPENM, const vector<int> &pipelineSpeedUp,

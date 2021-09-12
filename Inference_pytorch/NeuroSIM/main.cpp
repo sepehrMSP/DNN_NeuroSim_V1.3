@@ -111,7 +111,8 @@ int main(int argc, char* argv[]) {
 	double maxPESizeNM, maxTileSizeCM, numPENM;
 	vector<int> layers_mapping;
 	vector<int> pipelineSpeedUp;
-	pipelineSpeedUp = ChipDesignInitialize(inputParameter, tech, cell, true, netStructure, &maxPESizeNM, &maxTileSizeCM, &numPENM);
+	ChipDesignInitialize(inputParameter, tech, cell);
+	pipelineSpeedUp = getLayersPipelineSpeedUp(netStructure);
 	layers_mapping = getLayersMapping(netStructure, &maxPESizeNM, &maxTileSizeCM, &numPENM);
 	// markNM = ChipDesignInitialize(inputParameter, tech, cell, false, netStructure, &maxPESizeNM, &maxTileSizeCM, &numPENM);
 

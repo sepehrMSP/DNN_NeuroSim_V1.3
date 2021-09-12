@@ -132,79 +132,14 @@ vector<int> getLayersMapping(const vector<vector<double>> &netStructure, double 
 	return layersMapping;
 }
 
-vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell, bool pip, const vector<vector<double>> &netStructure,
-					double *maxPESizeNM, double *maxTileSizeCM, double *numPENM){
-
-	globalBuffer = new Buffer(inputParameter, tech, cell);
-	GhTree = new HTree(inputParameter, tech, cell);
-	Gaccumulation = new AdderTree(inputParameter, tech, cell);
-	Gsigmoid = new Sigmoid(inputParameter, tech, cell);
-	GreLu = new BitShifter(inputParameter, tech, cell);
-	maxPool = new MaxPooling(inputParameter, tech, cell);
-
-	int numRowPerSynapse, numColPerSynapse;
-	numRowPerSynapse = param->numRowPerSynapse;
-	numColPerSynapse = param->numColPerSynapse;
-
-	double numLayer, minCube;
-
-	// get information of network structure
-	numLayer = netStructure.size();
-	*maxPESizeNM = 0;
-	*maxTileSizeCM = 0;
-	*numPENM = 0;
-
-	vector<int> layersMapping;
-	if (param->mapping == NOVEL_MAPPING) {
-		// define number of PE in COV layers
-		int most = 0;
-		int numPE = 0;
-		for (int i=0; i<numLayer; i++) {
-			int temp = netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH];
-			int count = 1;
-			for (int j=0; j<numLayer; j++) {
-				if (temp == netStructure[j][KERNEL_LENGTH]*netStructure[j][KERNEL_WIDTH] && temp!=1) {
-					count ++;
-				}
-				if (most < count) {
-					most = count;
-					numPE = temp;
-				}
-			}
-		}
-		*numPENM = numPE;
-		// mark the layers that use novel mapping
-		for (int i=0; i<numLayer; i++) {
-
-			if ((netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH]== (*numPENM))
-				// large Cov layers use novel mapping
-				&&(netStructure[i][IFM_CHANNEL_DEPTH]*netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH]*numRowPerSynapse >= param->numRowSubArray)) {
-				layersMapping.push_back(NOVEL_MAPPING);
-				minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
-				*maxPESizeNM = max(minCube, (*maxPESizeNM));
-			} else {
-				// small Cov layers and FC layers use conventional mapping
-				layersMapping.push_back(CONVENTIONAL);
-				minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
-				*maxTileSizeCM = max(minCube, (*maxTileSizeCM));
-			}
-		}
-	} else {
-		// all layers use conventional mapping
-		for (int i=0; i<numLayer; i++) {
-			layersMapping.push_back(CONVENTIONAL);
-			minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
-			*maxTileSizeCM = max(minCube, (*maxTileSizeCM));
-		}
-	}
-
-	// for pipeline system
+vector<int> getLayersPipelineSpeedUp(const vector<vector<double>> &netStructure){
+	double numLayer = netStructure.size();
 	vector<int> pipelineSpeedUp;
 	if (param->pipeline) {
 		// find max and min IFM size --> define how much the system can be speed-up
 		int maxIFMSize = netStructure[0][IFM_LENGTH];
 		int minIFMSize = maxIFMSize;
-		for (int i=0; i<numLayer; i++) {
+		for (int i = 0; i < numLayer; i++) {
 			if (netStructure[i][KERNEL_LENGTH] != 1) {
 				int thisIFMSize = netStructure[i][IFM_LENGTH];
 				if (thisIFMSize < minIFMSize) {
@@ -228,11 +163,16 @@ vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tec
 		}
 	}
 
-	if (pip) {
-		return pipelineSpeedUp;
-	} else {
-		return layersMapping;
-	}
+	return pipelineSpeedUp;
+}
+
+void ChipDesignInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell){
+	globalBuffer = new Buffer(inputParameter, tech, cell);
+	GhTree = new HTree(inputParameter, tech, cell);
+	Gaccumulation = new AdderTree(inputParameter, tech, cell);
+	Gsigmoid = new Sigmoid(inputParameter, tech, cell);
+	GreLu = new BitShifter(inputParameter, tech, cell);
+	maxPool = new MaxPooling(inputParameter, tech, cell);
 }
 
 
