@@ -114,7 +114,7 @@ void TileInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 
 	ProcessingUnitInitialize(subArrayInPE, inputParameter, tech, cell, ceil(sqrt(numSubArrayNM)), ceil(sqrt(numSubArrayNM)), ceil(sqrt(numSubArrayCM)), ceil(sqrt(numSubArrayCM)));
 
-	if (param->novelMapping) {
+	if (param->mapping == NOVEL_MAPPING) {
 		if (param->parallelRead) {
 			accumulationNM->Initialize(numPENM, ceil((double)log2((double)param->levelOutput))+param->numBitInput+1+ceil((double)log2((double)peSizeNM/(double)param->numRowSubArray)), 
 									ceil((double)numPENM*(double)param->numColSubArray/(double)param->numColMuxed), param->clkFreq);

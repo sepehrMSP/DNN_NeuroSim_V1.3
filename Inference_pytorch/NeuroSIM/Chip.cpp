@@ -3,22 +3,22 @@
 * School of Electrical, Computer and Energy Engineering, Arizona State University
 * PI: Prof. Shimeng Yu
 * All rights reserved.
-* 
-* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark 
-* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory). 
-* Copyright of the model is maintained by the developers, and the model is distributed under 
-* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License 
+*
+* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark
+* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory).
+* Copyright of the model is maintained by the developers, and the model is distributed under
+* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License
 * http://creativecommons.org/licenses/by-nc/4.0/legalcode.
 * The source code is free and you can redistribute and/or modify it
 * by providing that the following conditions are met:
-* 
+*
 *  1) Redistributions of source code must retain the above copyright notice,
 *     this list of conditions and the following disclaimer.
-* 
+*
 *  2) Redistributions in binary form must reproduce the above copyright notice,
 *     this list of conditions and the following disclaimer in the documentation
 *     and/or other materials provided with the distribution.
-* 
+*
 * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,10 +29,10 @@
 * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-* 
-* Developer list: 
-*   Pai-Yu Chen	    Email: pchen72 at asu dot edu 
-*                    
+*
+* Developer list:
+*   Pai-Yu Chen	    Email: pchen72 at asu dot edu
+*
 *   Xiaochen Peng   Email: xpeng15 at asu dot edu
 ********************************************************************************/
 
@@ -60,7 +60,7 @@ using namespace std;
 
 extern Param *param;
 double globalBusWidth = 0;
-int numBufferCore = 0;				  
+int numBufferCore = 0;
 
 /*** Circuit Modules ***/
 Buffer *globalBuffer;
@@ -69,9 +69,70 @@ AdderTree *Gaccumulation;
 Sigmoid *Gsigmoid;
 BitShifter *GreLu;
 MaxPooling *maxPool;
- 
 
-vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell, bool pip, const vector<vector<double> > &netStructure,
+vector<int> getLayersMapping(const vector<vector<double>> &netStructure, double *maxPESizeNM,
+							 double *maxTileSizeCM, double *numPENM) {
+
+	int numRowPerSynapse, numColPerSynapse;
+	numRowPerSynapse = param->numRowPerSynapse;
+	numColPerSynapse = param->numColPerSynapse;
+
+	double numLayer, minCube;
+
+	// get information of network structure
+	numLayer = netStructure.size();
+	*maxPESizeNM = 0;
+	*maxTileSizeCM = 0;
+	*numPENM = 0;
+
+	vector<int> layersMapping;
+	if (param->mapping == NOVEL_MAPPING) {
+		// define number of PE in COV layers
+		int most = 0;
+		int numPE = 0;
+		for (int i=0; i<numLayer; i++) {
+			int temp = netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH];
+			int count = 1;
+			for (int j=0; j<numLayer; j++) {
+				if (temp == netStructure[j][KERNEL_LENGTH]*netStructure[j][KERNEL_WIDTH] && temp!=1) {
+					count ++;
+				}
+				if (most < count) {
+					most = count;
+					numPE = temp;
+				}
+			}
+		}
+		*numPENM = numPE;
+		// mark the layers that use novel mapping
+		for (int i=0; i<numLayer; i++) {
+
+			if ((netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH]== (*numPENM))
+				// large Cov layers use novel mapping
+				&&(netStructure[i][IFM_CHANNEL_DEPTH]*netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH]*numRowPerSynapse >= param->numRowSubArray)) {
+				layersMapping.push_back(NOVEL_MAPPING);
+				minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
+				*maxPESizeNM = max(minCube, (*maxPESizeNM));
+			} else {
+				// small Cov layers and FC layers use conventional mapping
+				layersMapping.push_back(CONVENTIONAL);
+				minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
+				*maxTileSizeCM = max(minCube, (*maxTileSizeCM));
+			}
+		}
+	} else {
+		// all layers use conventional mapping
+		for (int i=0; i<numLayer; i++) {
+			layersMapping.push_back(CONVENTIONAL);
+			minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
+			*maxTileSizeCM = max(minCube, (*maxTileSizeCM));
+		}
+	}
+
+	return layersMapping;
+}
+
+vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell, bool pip, const vector<vector<double>> &netStructure,
 					double *maxPESizeNM, double *maxTileSizeCM, double *numPENM){
 
 	globalBuffer = new Buffer(inputParameter, tech, cell);
@@ -84,17 +145,17 @@ vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tec
 	int numRowPerSynapse, numColPerSynapse;
 	numRowPerSynapse = param->numRowPerSynapse;
 	numColPerSynapse = param->numColPerSynapse;
-	
+
 	double numLayer, minCube;
-	
+
 	// get information of network structure
 	numLayer = netStructure.size();
 	*maxPESizeNM = 0;
 	*maxTileSizeCM = 0;
 	*numPENM = 0;
 
-	vector<int> markNM;
-	if (param->novelMapping) {
+	vector<int> layersMapping;
+	if (param->mapping == NOVEL_MAPPING) {
 		// define number of PE in COV layers
 		int most = 0;
 		int numPE = 0;
@@ -102,7 +163,7 @@ vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tec
 			int temp = netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH];
 			int count = 1;
 			for (int j=0; j<numLayer; j++) {
-				if (temp == netStructure[j][KERNEL_LENGTH]*netStructure[j][KERNEL_WIDTH] && temp != 1) {
+				if (temp == netStructure[j][KERNEL_LENGTH]*netStructure[j][KERNEL_WIDTH] && temp!=1) {
 					count ++;
 				}
 				if (most < count) {
@@ -114,16 +175,16 @@ vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tec
 		*numPENM = numPE;
 		// mark the layers that use novel mapping
 		for (int i=0; i<numLayer; i++) {
-			
+
 			if ((netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH]== (*numPENM))
 				// large Cov layers use novel mapping
 				&&(netStructure[i][IFM_CHANNEL_DEPTH]*netStructure[i][KERNEL_LENGTH]*netStructure[i][KERNEL_WIDTH]*numRowPerSynapse >= param->numRowSubArray)) {
-				markNM.push_back(1);
+				layersMapping.push_back(NOVEL_MAPPING);
 				minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
 				*maxPESizeNM = max(minCube, (*maxPESizeNM));
 			} else {
 				// small Cov layers and FC layers use conventional mapping
-				markNM.push_back(0);
+				layersMapping.push_back(CONVENTIONAL);
 				minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
 				*maxTileSizeCM = max(minCube, (*maxTileSizeCM));
 			}
@@ -131,19 +192,19 @@ vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tec
 	} else {
 		// all layers use conventional mapping
 		for (int i=0; i<numLayer; i++) {
-			markNM.push_back(0);
-			minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_WIDTH]*(double) numColPerSynapse) ) );
+			layersMapping.push_back(CONVENTIONAL);
+			minCube = pow(2, ceil((double) log2((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse) ) );
 			*maxTileSizeCM = max(minCube, (*maxTileSizeCM));
 		}
 	}
-	
+
 	// for pipeline system
 	vector<int> pipelineSpeedUp;
 	if (param->pipeline) {
 		// find max and min IFM size --> define how much the system can be speed-up
 		int maxIFMSize = netStructure[0][IFM_LENGTH];
 		int minIFMSize = maxIFMSize;
-		for (int i = 0; i < numLayer; i ++) {
+		for (int i=0; i<numLayer; i++) {
 			if (netStructure[i][KERNEL_LENGTH] != 1) {
 				int thisIFMSize = netStructure[i][IFM_LENGTH];
 				if (thisIFMSize < minIFMSize) {
@@ -151,7 +212,7 @@ vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tec
 				}
 			}
 		}
-		
+
 		// justify the speed-up degree is necessary
 		int maxSpeedUpDegree = int(maxIFMSize/minIFMSize);
 		if (maxSpeedUpDegree < param->speedUpDegree) {
@@ -161,38 +222,38 @@ vector<int> ChipDesignInitialize(InputParameter& inputParameter, Technology& tec
 		}
 		// define the pipeline speed-up
 		int boundIFMSize = ceil((double) maxIFMSize/(param->speedUpDegree));
-		for (int i = 0; i < numLayer; i ++) {
+		for (int i=0; i<numLayer; i++) {
 			int speedUp = ceil((double) pow((netStructure[i][IFM_LENGTH]/boundIFMSize), 2));
 			pipelineSpeedUp.push_back(speedUp);
 		}
 	}
-	
+
 	if (pip) {
 		return pipelineSpeedUp;
 	} else {
-		return markNM;
+		return layersMapping;
 	}
 }
 
 
-vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bool findSpeedUp, const vector<vector<double> > &netStructure, const vector<int > &markNM, 
+vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, bool findSpeedUp, const vector<vector<double>> &netStructure, const vector<int > &markNM,
 					double maxPESizeNM, double maxTileSizeCM, double numPENM, const vector<int> &pipelineSpeedUp,
 					double *desiredNumTileNM, double *desiredPESizeNM, double *desiredNumTileCM, double *desiredTileSizeCM, double *desiredPESizeCM, int *numTileRow, int *numTileCol) {
-	
-	
+
+
 	int numRowPerSynapse, numColPerSynapse;
 	numRowPerSynapse = param->numRowPerSynapse;
 	numColPerSynapse = param->numColPerSynapse;
-	
+
 	double maxUtilizationNM = 0;
 	double maxUtilizationCM = 0;
-	
-	vector<vector<double> > peDup;
-	vector<vector<double> > subArrayDup;
-	vector<vector<double> > numTileEachLayer;
-	vector<vector<double> > utilizationEachLayer;
-	vector<vector<double> > speedUpEachLayer;
-	
+
+	vector<vector<double>> peDup;
+	vector<vector<double>> subArrayDup;
+	vector<vector<double>> numTileEachLayer;
+	vector<vector<double>> utilizationEachLayer;
+	vector<vector<double>> speedUpEachLayer;
+
 	*desiredNumTileNM = 0;
 	*desiredPESizeNM = 0;
 	*desiredNumTileCM = 0;
@@ -201,11 +262,11 @@ vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bo
 	*numTileRow = 0;
 	*numTileCol = 0;
 
-	if (param->novelMapping) {		// Novel Mapping
+	if (param->mapping == NOVEL_MAPPING) {		// Novel Mapping
 		if (maxPESizeNM < 2*param->numRowSubArray) {
 			cout << "ERROR: SubArray Size is too large, which break the chip hierarchey, please decrease the SubArray size! " << endl;
 		}else{
-		
+
 			/*** Tile Design ***/
 			*desiredPESizeNM = MAX(maxPESizeNM, 2*param->numRowSubArray);
 			vector<double> initialDesignNM;
@@ -244,7 +305,7 @@ vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bo
 			for (double thisPESize = (*desiredTileSizeCM)/2; thisPESize > 2*param->numRowSubArray; thisPESize/=2) {
 				// define PE Size for layers use conventional mapping
 				double thisUtilization = 0;
-				vector<vector<double> > thisDesign;
+				vector<vector<double>> thisDesign;
 				thisDesign = PEDesign(true, thisPESize, (*desiredTileSizeCM), (*desiredNumTileCM), markNM, netStructure, numRowPerSynapse, numColPerSynapse);
 				thisUtilization = thisDesign[1][0];
 				if (thisUtilization > maxUtilizationCM) {
@@ -286,7 +347,7 @@ vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bo
 			for (double thisPESize = (*desiredTileSizeCM)/2; thisPESize > 2*param->numRowSubArray; thisPESize/=2) {
 				// define PE Size for layers use conventional mapping
 				double thisUtilization = 0;
-				vector<vector<double> > thisDesign;
+				vector<vector<double>> thisDesign;
 				thisDesign = PEDesign(true, thisPESize, (*desiredTileSizeCM), (*desiredNumTileCM), markNM, netStructure, numRowPerSynapse, numColPerSynapse);
 				thisUtilization = thisDesign[1][0];
 				if (thisUtilization > maxUtilizationCM) {
@@ -303,7 +364,7 @@ vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bo
 			speedUpEachLayer = OverallEachLayer(false, true, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), 0, markNM, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
 		}
 	}
-	
+
 	if (param->pipeline) {
 		// update # of tile for pipeline system design
 		*desiredNumTileCM = 0;
@@ -316,11 +377,11 @@ vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bo
 			}
 		}
 	}
-	
+
 	*numTileRow = ceil((double)sqrt((double)(*desiredNumTileCM)+(double)(*desiredNumTileNM)));
 	*numTileCol = ceil((double)((*desiredNumTileCM)+(*desiredNumTileNM))/(double)(*numTileRow));
-	
-	vector<vector<double> > tileLocaEachLayer;
+
+	vector<vector<double>> tileLocaEachLayer;
 	vector<double> tileLocaEachLayerRow;
 	vector<double> tileLocaEachLayerCol;
 	double thisTileTotal;
@@ -336,7 +397,7 @@ vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bo
 	}
 	tileLocaEachLayer.push_back(tileLocaEachLayerRow);
 	tileLocaEachLayer.push_back(tileLocaEachLayerCol);
-	
+
 	if (findNumTile) {
 		return numTileEachLayer;
 	} else if (findUtilization) {
@@ -354,8 +415,8 @@ vector<vector<double> > ChipFloorPlan(bool findNumTile, bool findUtilization, bo
 }
 
 
-void ChipInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell, const vector<vector<double> > &netStructure, const vector<int > &markNM, const vector<vector<double> > &numTileEachLayer,
-					double numPENM, double desiredNumTileNM, double desiredPESizeNM, double desiredNumTileCM, double desiredTileSizeCM, double desiredPESizeCM, int numTileRow, int numTileCol) { 
+void ChipInitialize(InputParameter& inputParameter, Technology& tech, MemCell& cell, const vector<vector<double>> &netStructure, const vector<int > &markNM, const vector<vector<double>> &numTileEachLayer,
+					double numPENM, double desiredNumTileNM, double desiredPESizeNM, double desiredNumTileCM, double desiredTileSizeCM, double desiredPESizeCM, int numTileRow, int numTileCol) {
 
 	/*** Initialize Tile ***/
 	TileInitialize(inputParameter, tech, cell, numPENM, desiredPESizeNM, ceil((double)(desiredTileSizeCM)/(double)(desiredPESizeCM)), desiredPESizeCM);
@@ -383,8 +444,8 @@ void ChipInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 				globalBusWidth += ((desiredPESizeNM)*ceil((double)sqrt(numPENM))+(desiredPESizeNM)*ceil((double)sqrt(numPENM))/param->numColMuxed)*numTileEachLayer[0][i]*numTileEachLayer[1][i];
 			}
 		}
-		
-		
+
+
 		if (numTileEachLayer[0][i] > maxTileAdded) {
 			maxTileAdded = numTileEachLayer[0][i];
 		}
@@ -393,22 +454,22 @@ void ChipInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 	while (globalBusWidth > param->maxGlobalBusWidth) {
 		globalBusWidth /= 2;
 	}
-	
+
 	// define bufferSize for inference operation
-	int bufferSize = param->numBitInput*maxLayerInput;										 
-	
+	int bufferSize = param->numBitInput*maxLayerInput;
+
 	//globalBuffer->Initialize(param->numBitInput*maxLayerInput, globalBusWidth, 1, param->unitLengthWireResistance, param->clkFreq, param->globalBufferType);
 	numBufferCore = ceil(bufferSize/(param->globalBufferCoreSizeRow*param->globalBufferCoreSizeCol));
 	//numBufferCore = ceil(1.5*numBufferCore);
 	globalBuffer->Initialize((param->globalBufferCoreSizeRow*param->globalBufferCoreSizeCol), param->globalBufferCoreSizeCol, 1, param->unitLengthWireResistance, param->clkFreq, param->globalBufferType);
-	
+
 	maxPool->Initialize(param->numBitInput, 2*2, (desiredTileSizeCM), param->clkFreq);
 	GhTree->Initialize((numTileRow), (numTileCol), param->globalBusDelayTolerance, globalBusWidth, param->clkFreq);
-	
+
 	//activation inside Tile or outside?
 	if (param->chipActivation) {
 		int maxThroughputTile, maxAddFromSubArray;
-		if (param->novelMapping) {
+		if (param->mapping == NOVEL_MAPPING) {
 			maxThroughputTile = (int) max((desiredTileSizeCM), ceil((double)sqrt(numPENM))*(desiredPESizeNM));
 			maxAddFromSubArray = (int) max(ceil((double)(desiredPESizeCM)/(double)param->numRowSubArray), ceil((double)(desiredPESizeNM)/(double)param->numRowSubArray));   // from subArray to ProcessingUnit
 			maxAddFromSubArray *= (int) max(ceil((double)(desiredTileSizeCM)/(double)(desiredPESizeCM)), ceil((double)sqrt(numPENM)));    // from ProcessingUnit to Tile
@@ -417,16 +478,16 @@ void ChipInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 				maxAddFromSubArray *= (netStructure.size()+1);
 			}
 			if (param->parallelRead) {
-				Gaccumulation->Initialize((int) maxTileAdded, ceil((double) log2((double) param->levelOutput))+param->numBitInput+1+ceil((double) log2((double) maxAddFromSubArray)), 
+				Gaccumulation->Initialize((int) maxTileAdded, ceil((double) log2((double) param->levelOutput))+param->numBitInput+1+ceil((double) log2((double) maxAddFromSubArray)),
 										ceil((double) maxThroughputTile/(double) param->numColMuxed), param->clkFreq);
 			} else {
-				Gaccumulation->Initialize((int) maxTileAdded, ceil((double) log2((double) param->numRowSubArray)+(double) param->cellBit-1)+param->numBitInput+1+ceil((double) log2((double) maxAddFromSubArray)), 
+				Gaccumulation->Initialize((int) maxTileAdded, ceil((double) log2((double) param->numRowSubArray)+(double) param->cellBit-1)+param->numBitInput+1+ceil((double) log2((double) maxAddFromSubArray)),
 										ceil((double) maxThroughputTile/(double) param->numColMuxed), param->clkFreq);
 			}
 			if (param->reLu) {
 				GreLu->Initialize(ceil((double) maxThroughputTile/(double) param->numColMuxed), param->numBitInput, param->clkFreq);
 			} else {
-				Gsigmoid->Initialize(false, param->numBitInput, ceil((double) log2((double) param->numRowSubArray)+(double) param->cellBit-1)+param->numBitInput+1+log2((double) maxAddFromSubArray)+ceil((double) log2((double) maxTileAdded)), 
+				Gsigmoid->Initialize(false, param->numBitInput, ceil((double) log2((double) param->numRowSubArray)+(double) param->cellBit-1)+param->numBitInput+1+log2((double) maxAddFromSubArray)+ceil((double) log2((double) maxTileAdded)),
 										ceil((double) maxThroughputTile/(double) param->numColMuxed), param->clkFreq);
 			}
 		} else {
@@ -436,22 +497,22 @@ void ChipInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 				maxAddFromSubArray *= (netStructure.size()+1);
 			}
 			if (param->parallelRead) {
-				Gaccumulation->Initialize((int) maxTileAdded, ceil((double)log2((double)param->levelOutput))+param->numBitInput+1+ceil((double)log2((double)maxAddFromSubArray)), 
+				Gaccumulation->Initialize((int) maxTileAdded, ceil((double)log2((double)param->levelOutput))+param->numBitInput+1+ceil((double)log2((double)maxAddFromSubArray)),
 										ceil((double)(desiredTileSizeCM)/(double)param->numColMuxed), param->clkFreq);
 			} else {
-				Gaccumulation->Initialize((int) maxTileAdded, ceil((double)log2((double)param->numRowSubArray)+(double)param->cellBit-1)+param->numBitInput+1+ceil((double)log2((double)maxAddFromSubArray)), 
+				Gaccumulation->Initialize((int) maxTileAdded, ceil((double)log2((double)param->numRowSubArray)+(double)param->cellBit-1)+param->numBitInput+1+ceil((double)log2((double)maxAddFromSubArray)),
 										ceil((double)(desiredTileSizeCM)/(double)param->numColMuxed), param->clkFreq);
 			}
 			if (param->reLu) {
 				GreLu->Initialize(ceil((double)(desiredTileSizeCM)/(double)param->numColMuxed), param->numBitInput, param->clkFreq);
 			} else {
-				Gsigmoid->Initialize(false, param->numBitInput, ceil((double) log2((double) param->numRowSubArray)+(double) param->cellBit-1)+param->numBitInput+1+log2((double) maxAddFromSubArray)+ceil((double) log2((double) maxTileAdded)), 
+				Gsigmoid->Initialize(false, param->numBitInput, ceil((double) log2((double) param->numRowSubArray)+(double) param->cellBit-1)+param->numBitInput+1+log2((double) maxAddFromSubArray)+ceil((double) log2((double) maxTileAdded)),
 										ceil((double) (desiredTileSizeCM)/(double) param->numColMuxed), param->clkFreq);
 			}
 		}
 	} else {   // activation inside tiles
 		int maxThroughputTile;
-		if (param->novelMapping) {
+		if (param->mapping == NOVEL_MAPPING) {
 			maxThroughputTile = (int) max((desiredTileSizeCM), ceil((double) sqrt((double) numPENM))*(double) (desiredPESizeNM));
 			if (param->pipeline) {
 				maxThroughputTile *= (netStructure.size()+1);
@@ -473,34 +534,34 @@ void ChipInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 
 
 
-vector<double> ChipCalculateArea(InputParameter& inputParameter, Technology& tech, MemCell& cell, double desiredNumTileNM, double numPENM, double desiredPESizeNM, double desiredNumTileCM, double desiredTileSizeCM, 
+vector<double> ChipCalculateArea(InputParameter& inputParameter, Technology& tech, MemCell& cell, double desiredNumTileNM, double numPENM, double desiredPESizeNM, double desiredNumTileCM, double desiredTileSizeCM,
 						double desiredPESizeCM, int numTileRow, double *height, double *width, double *CMTileheight, double *CMTilewidth, double *NMTileheight, double *NMTilewidth) {
-	
+
 	vector<double> areaResults;
-	
+
 	double area = 0;
 	double areaIC = 0;
 	double areaADC = 0;
 	double areaAccum = 0;
 	double areaOther = 0;
 	double areaArray = 0;
-	
+
 	double NMheight = 0;
 	double NMwidth = 0;
 	double CMheight = 0;
 	double CMwidth = 0;
-	
+
 	*NMTileheight = 0;
 	*NMTilewidth = 0;
 	*CMTileheight = 0;
 	*CMTilewidth = 0;
 	*height = 0;
 	*width = 0;
-	
+
 	vector<double> areaCMTile;
 	vector<double> areaNMTile;
-	
-	if (param->novelMapping) {
+
+	if (param->mapping == NOVEL_MAPPING) {
 		areaNMTile = TileCalculateArea(numPENM, desiredPESizeNM, true, &NMheight, &NMwidth);
 		double NMTileArea = areaNMTile[0];
 		double NMTileAreaIC = areaNMTile[1];
@@ -518,7 +579,7 @@ vector<double> ChipCalculateArea(InputParameter& inputParameter, Technology& tec
 		*NMTilewidth = NMwidth;
 	}
 	areaCMTile = TileCalculateArea(pow(ceil((double) desiredTileSizeCM/(double) desiredPESizeCM), 2), desiredPESizeCM, false, &CMheight, &CMwidth);
-	
+
 	double CMTileArea = areaCMTile[0];
 	double CMTileAreaIC = areaCMTile[1];
 	double CMTileAreaADC = areaCMTile[2];
@@ -533,20 +594,20 @@ vector<double> ChipCalculateArea(InputParameter& inputParameter, Technology& tec
 	areaArray += CMTileAreaArray*desiredNumTileCM;
 	*CMTileheight = CMheight;
 	*CMTilewidth = CMwidth;
-	
+
 	// global buffer is made up by multiple cores
 	globalBuffer->CalculateArea(numTileRow*max(NMheight, CMheight), NULL, NONE);
 	double globalBufferArea = globalBuffer->area*numBufferCore;
 	double globalBufferHeight = numTileRow*max(NMheight, CMheight);
-	double globalBufferWidth = globalBufferArea/globalBufferHeight;														
+	double globalBufferWidth = globalBufferArea/globalBufferHeight;
 	GhTree->CalculateArea(max(NMheight, CMheight), max(NMwidth, CMwidth), param->treeFoldedRatio);
 	maxPool->CalculateUnitArea(NONE);
 	maxPool->CalculateArea(globalBufferWidth);
 	Gaccumulation->CalculateArea(NULL, globalBufferHeight/3, NONE);
-	
+
 	double areaGreLu = 0;
 	double areaGsigmoid = 0;
-	
+
 	if (param->chipActivation) {
 		if (param->reLu) {
 			GreLu->CalculateArea(NULL, globalBufferWidth/3, NONE);
@@ -559,7 +620,7 @@ vector<double> ChipCalculateArea(InputParameter& inputParameter, Technology& tec
 			areaGsigmoid += Gsigmoid->area;
 		}
 	}
-	
+
 	area += globalBufferArea + GhTree->area + maxPool->area + Gaccumulation->area;
 	areaIC += GhTree->area;
 	areaResults.push_back(area);
@@ -568,38 +629,38 @@ vector<double> ChipCalculateArea(InputParameter& inputParameter, Technology& tec
 	areaResults.push_back(areaAccum + Gaccumulation->area);
 	areaResults.push_back(areaOther + globalBufferArea + maxPool->area + areaGreLu + areaGsigmoid);
 	areaResults.push_back(areaArray);
-	
+
 	*height = sqrt(area);
 	*width = area/(*height);
-	
+
 	return areaResults;
 }
 
 
-double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech, MemCell& cell, int layerNumber, const string &newweightfile, const string &oldweightfile, const string &inputfile, bool followedByMaxPool, 
-							const vector<vector<double> > &netStructure, const vector<int> &markNM, const vector<vector<double> > &numTileEachLayer, const vector<vector<double> > &utilizationEachLayer, 
-							const vector<vector<double> > &speedUpEachLayer, const vector<vector<double> > &tileLocaEachLayer, double numPENM, double desiredPESizeNM, double desiredTileSizeCM, 
+double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech, MemCell& cell, int layerNumber, const string &newweightfile, const string &oldweightfile, const string &inputfile, bool followedByMaxPool,
+							const vector<vector<double>> &netStructure, const vector<int> &markNM, const vector<vector<double>> &numTileEachLayer, const vector<vector<double>> &utilizationEachLayer,
+							const vector<vector<double>> &speedUpEachLayer, const vector<vector<double>> &tileLocaEachLayer, double numPENM, double desiredPESizeNM, double desiredTileSizeCM,
 							double desiredPESizeCM, double CMTileheight, double CMTilewidth, double NMTileheight, double NMTilewidth,
-							double *readLatency, double *readDynamicEnergy, double *leakage, double *bufferLatency, double *bufferDynamicEnergy, double *icLatency, double *icDynamicEnergy, 
+							double *readLatency, double *readDynamicEnergy, double *leakage, double *bufferLatency, double *bufferDynamicEnergy, double *icLatency, double *icDynamicEnergy,
 							double *coreLatencyADC, double *coreLatencyAccum, double *coreLatencyOther, double *coreEnergyADC, double *coreEnergyAccum, double *coreEnergyOther, bool CalculateclkFreq, double *clkPeriod) {
-	
-	
+
+
 	int numRowPerSynapse, numColPerSynapse;
 	numRowPerSynapse = param->numRowPerSynapse;
 	numColPerSynapse = param->numColPerSynapse;
-	
+
 	// only get performance of single layer
 	int l = layerNumber;
 	// get weight matrix file Size
 	int weightMatrixRow = netStructure[l][IFM_CHANNEL_DEPTH]*netStructure[l][KERNEL_LENGTH]*netStructure[l][KERNEL_WIDTH]*numRowPerSynapse;
 	int weightMatrixCol = netStructure[l][KERNEL_DEPTH]*numColPerSynapse;
-	
-	// load in whole file 
-	vector<vector<double> > inputVector;
-	inputVector = LoadInInputData(inputfile); 
-	vector<vector<double> > newMemory;
+
+	// load in whole file
+	vector<vector<double>> inputVector;
+	inputVector = LoadInInputData(inputfile);
+	vector<vector<double>> newMemory;
 	newMemory = LoadInWeightData(newweightfile, numRowPerSynapse, numColPerSynapse, param->maxConductance, param->minConductance);
-	
+
 	*readLatency = 0;
 	*readDynamicEnergy = 0;
 	*leakage = 0;
@@ -607,26 +668,26 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 	*bufferDynamicEnergy = 0;
 	*icLatency = 0;
 	*icDynamicEnergy = 0;
-	
+
 	*coreEnergyADC = 0;
 	*coreEnergyAccum = 0;
 	*coreEnergyOther = 0;
 	*coreLatencyADC = 0;
 	*coreLatencyAccum = 0;
 	*coreLatencyOther = 0;
-	
+
 	double tileLeakage = 0;
-	
+
 	int numInVector = (netStructure[l][IFM_LENGTH]-netStructure[l][KERNEL_LENGTH]+1)/netStructure[l][7]*(netStructure[l][IFM_WIDTH]-netStructure[l][KERNEL_WIDTH]+1)/netStructure[l][7];
 	int totalNumTile = 0;
 	for (int i=0; i<netStructure.size(); i++) {
 		totalNumTile += numTileEachLayer[0][i] * numTileEachLayer[1][i];
 	}
-	
+
 	if (markNM[l] == 0) {   // conventional mapping
 		for (int i=0; i<ceil((double) netStructure[l][IFM_CHANNEL_DEPTH]*(double) netStructure[l][KERNEL_LENGTH]*(double) netStructure[l][KERNEL_WIDTH]*(double) numRowPerSynapse/desiredTileSizeCM); i++) {       // # of tiles in row
 			for (int j=0; j<ceil((double) netStructure[l][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredTileSizeCM); j++) {   // # of tiles in Column
-				
+
 				double tileReadLatency = 0;
 				double tileReadDynamicEnergy = 0;
 				double tilebufferLatency = 0;
@@ -642,17 +703,17 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 
 				int numRowMatrix = min(desiredTileSizeCM, weightMatrixRow-i*desiredTileSizeCM);
 				int numColMatrix = min(desiredTileSizeCM, weightMatrixCol-j*desiredTileSizeCM);
-				
+
 				// assign weight and input to specific tile
-				vector<vector<double> > tileMemory;
+				vector<vector<double>> tileMemory;
 				tileMemory = CopyArray(newMemory, i*desiredTileSizeCM, j*desiredTileSizeCM, numRowMatrix, numColMatrix);
-				
-				vector<vector<double> > tileInput;
+
+				vector<vector<double>> tileInput;
 				tileInput = CopyInput(inputVector, i*desiredTileSizeCM, numInVector*param->numBitInput, numRowMatrix);
-				
+
 				TileCalculatePerformance(tileMemory, tileMemory, tileInput, markNM[l], ceil((double)desiredTileSizeCM/(double)desiredPESizeCM), desiredPESizeCM, speedUpEachLayer[0][l], speedUpEachLayer[1][l],
 									numRowMatrix, numColMatrix, numInVector*param->numBitInput, cell, &tileReadLatency, &tileReadDynamicEnergy, &tileLeakage,
-									&tilebufferLatency, &tilebufferDynamicEnergy, &tileicLatency, &tileicDynamicEnergy, 
+									&tilebufferLatency, &tilebufferDynamicEnergy, &tileicLatency, &tileicDynamicEnergy,
 									&tileLatencyADC, &tileLatencyAccum, &tileLatencyOther, &tileEnergyADC, &tileEnergyAccum, &tileEnergyOther, CalculateclkFreq, clkPeriod);
 
 				*readLatency = MAX(tileReadLatency, (*readLatency));
@@ -661,11 +722,11 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 				*bufferDynamicEnergy += tilebufferDynamicEnergy;
 				*icLatency = MAX(tileicLatency, (*icLatency));
 				*icDynamicEnergy += tileicDynamicEnergy;
-				
+
 				*coreLatencyADC = MAX(tileLatencyADC, (*coreLatencyADC));
 				*coreLatencyAccum = MAX(tileLatencyAccum, (*coreLatencyAccum));
 				*coreLatencyOther = MAX(tileLatencyOther, (*coreLatencyOther));
-				
+
 				*coreEnergyADC += tileEnergyADC;
 				*coreEnergyAccum += tileEnergyAccum;
 				*coreEnergyOther += tileEnergyOther;
@@ -689,8 +750,8 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 					*coreEnergyOther += Gsigmoid->readDynamicEnergy;
 				}
 			}
-			
-			if (numTileEachLayer[0][l] > 1) {   
+
+			if (numTileEachLayer[0][l] > 1) {
 				Gaccumulation->CalculateLatency(ceil(numTileEachLayer[1][l]*netStructure[l][KERNEL_DEPTH]*(numInVector/(double) Gaccumulation->numAdderTree)), numTileEachLayer[0][l], 0);
 				Gaccumulation->CalculatePower(ceil(numTileEachLayer[1][l]*netStructure[l][KERNEL_DEPTH]*(numInVector/(double) Gaccumulation->numAdderTree)), numTileEachLayer[0][l]);
 				*readLatency += Gaccumulation->readLatency;
@@ -698,7 +759,7 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 				*coreLatencyAccum += Gaccumulation->readLatency;
 				*coreEnergyAccum += Gaccumulation->readDynamicEnergy;
 			}
-			
+
 			// if this layer is followed by Max Pool
 			if (followedByMaxPool) {
 				maxPool->CalculateLatency(1e20, 0, ceil((double) (numInVector/(double) maxPool->window)/(double) desiredTileSizeCM));
@@ -707,22 +768,22 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 				*readDynamicEnergy += maxPool->readDynamicEnergy;
 				*coreLatencyOther += maxPool->readLatency;
 				*coreEnergyOther += maxPool->readDynamicEnergy;
-			}							  
-			
+			}
+
 			double numBitToLoadOut = weightMatrixRow*param->numBitInput*numInVector;
 			double numBitToLoadIn = ceil(weightMatrixCol/param->numColPerSynapse)*param->numBitInput*numInVector/(netStructure[l][HAS_POOLING]? 4:1);
-			
+
 			// GhTree->CalculateLatency(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], CMTileheight, CMTilewidth, ceil((numBitToLoadOut+numBitToLoadIn)/ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile))));
-			// GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], CMTileheight, CMTilewidth, ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile)), 
+			// GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], CMTileheight, CMTilewidth, ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile)),
 								// ceil((numBitToLoadOut+numBitToLoadIn)/ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile))));
 			GhTree->CalculateLatency(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], CMTileheight, CMTilewidth, ceil((numBitToLoadOut+numBitToLoadIn)/GhTree->busWidth));
-			GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], CMTileheight, CMTilewidth, GhTree->busWidth, 
+			GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], CMTileheight, CMTilewidth, GhTree->busWidth,
 							ceil((numBitToLoadOut+numBitToLoadIn)/GhTree->busWidth));
 			globalBuffer->CalculateLatency(globalBuffer->interface_width, numBitToLoadOut/globalBuffer->interface_width,
 									globalBuffer->interface_width, numBitToLoadIn/globalBuffer->interface_width);
 			globalBuffer->CalculatePower(globalBuffer->interface_width, numBitToLoadOut/globalBuffer->interface_width,
 									globalBuffer->interface_width, numBitToLoadIn/globalBuffer->interface_width);
-			
+
 			// since multi-core buffer has improve the parallelism
 			globalBuffer->readLatency /= MIN(numBufferCore, ceil(globalBusWidth/globalBuffer->interface_width));
 			globalBuffer->writeLatency /= MIN(numBufferCore, ceil(globalBusWidth/globalBuffer->interface_width));
@@ -745,41 +806,41 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 				double tileEnergyADC = 0;
 				double tileEnergyAccum = 0;
 				double tileEnergyOther = 0;
-				
+
 				// novel mapping
 				int numtileEachLayerRow = ceil((double) netStructure[l][IFM_CHANNEL_DEPTH]*(double) numRowPerSynapse/(double) desiredPESizeNM);
 				int numtileEachLayerCol = ceil((double) netStructure[l][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredPESizeNM);
-				
+
 				int numRowMatrix = min(desiredPESizeNM*numPENM, weightMatrixRow-i*desiredPESizeNM*numPENM);
 				int numColMatrix = min(desiredPESizeNM, weightMatrixCol-j*desiredPESizeNM);
-				
+
 				// assign weight and input to specific tile
-				vector<vector<double> > tileMemory;
-				tileMemory = ReshapeArray(newMemory, i*desiredPESizeNM, j*desiredPESizeNM, (int) netStructure[l][IFM_CHANNEL_DEPTH]*numRowPerSynapse/numtileEachLayerRow, 
+				vector<vector<double>> tileMemory;
+				tileMemory = ReshapeArray(newMemory, i*desiredPESizeNM, j*desiredPESizeNM, (int) netStructure[l][IFM_CHANNEL_DEPTH]*numRowPerSynapse/numtileEachLayerRow,
 									(int) netStructure[l][KERNEL_DEPTH]*numColPerSynapse/numtileEachLayerCol, numPENM, (int) netStructure[l][IFM_CHANNEL_DEPTH]*numRowPerSynapse);
 
-				vector<vector<double> > tileInput;
-				tileInput = ReshapeInput(inputVector, i*desiredPESizeNM, (int) (netStructure[l][IFM_LENGTH]-netStructure[l][KERNEL_LENGTH]+1)*(netStructure[l][IFM_WIDTH]-netStructure[l][KERNEL_WIDTH]+1)*param->numBitInput, 
+				vector<vector<double>> tileInput;
+				tileInput = ReshapeInput(inputVector, i*desiredPESizeNM, (int) (netStructure[l][IFM_LENGTH]-netStructure[l][KERNEL_LENGTH]+1)*(netStructure[l][IFM_WIDTH]-netStructure[l][KERNEL_WIDTH]+1)*param->numBitInput,
 									(int) netStructure[l][IFM_CHANNEL_DEPTH]*numRowPerSynapse/numtileEachLayerRow, numPENM, (int) netStructure[l][IFM_CHANNEL_DEPTH]*numRowPerSynapse);
-	
-				
+
+
 				TileCalculatePerformance(tileMemory, tileMemory, tileInput, markNM[l], numPENM, desiredPESizeNM, speedUpEachLayer[0][l], speedUpEachLayer[1][l],
-									numRowMatrix, numColMatrix, numInVector*param->numBitInput, cell, 
+									numRowMatrix, numColMatrix, numInVector*param->numBitInput, cell,
 									&tileReadLatency, &tileReadDynamicEnergy, &tileLeakage, &tilebufferLatency, &tilebufferDynamicEnergy, &tileicLatency, &tileicDynamicEnergy,
 									&tileLatencyADC, &tileLatencyAccum, &tileLatencyOther, &tileEnergyADC, &tileEnergyAccum, &tileEnergyOther, CalculateclkFreq, clkPeriod);
-				
-				
+
+
 				*readLatency = MAX(tileReadLatency, (*readLatency));
 				*readDynamicEnergy += tileReadDynamicEnergy;
 				*bufferLatency = MAX(tilebufferLatency, (*bufferLatency));
 				*bufferDynamicEnergy += tilebufferDynamicEnergy;
 				*icLatency = MAX(tileicLatency, (*icLatency));
 				*icDynamicEnergy += tileicDynamicEnergy;
-				
+
 				*coreLatencyADC = MAX(tileLatencyADC, (*coreLatencyADC));
 				*coreLatencyAccum = MAX(tileLatencyAccum, (*coreLatencyAccum));
 				*coreLatencyOther = MAX(tileLatencyOther, (*coreLatencyOther));
-				
+
 				*coreEnergyADC += tileEnergyADC;
 				*coreEnergyAccum += tileEnergyAccum;
 				*coreEnergyOther += tileEnergyOther;
@@ -803,8 +864,8 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 					*coreEnergyOther += Gsigmoid->readDynamicEnergy;
 				}
 			}
-			
-			if (numTileEachLayer[0][l] > 1) {   
+
+			if (numTileEachLayer[0][l] > 1) {
 				Gaccumulation->CalculateLatency(ceil(numTileEachLayer[1][l]*netStructure[l][KERNEL_DEPTH]*(numInVector/(double) Gaccumulation->numAdderTree)), numTileEachLayer[0][l], 0);
 				Gaccumulation->CalculatePower(ceil(numTileEachLayer[1][l]*netStructure[l][KERNEL_DEPTH]*(numInVector/(double) Gaccumulation->numAdderTree)), numTileEachLayer[0][l]);
 				*readLatency += Gaccumulation->readLatency;
@@ -812,7 +873,7 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 				*coreLatencyAccum += Gaccumulation->readLatency;
 				*coreEnergyAccum += Gaccumulation->readDynamicEnergy;
 			}
-			
+
 			// if this layer is followed by Max Pool
 			if (followedByMaxPool) {
 				maxPool->CalculateLatency(1e20, 0, ceil((double) (numInVector/(double) maxPool->window)/(double) desiredPESizeNM*sqrt((double) numPENM)));
@@ -824,12 +885,12 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 			}
 			double numBitToLoadOut = weightMatrixRow*param->numBitInput*numInVector/netStructure[l][KERNEL_LENGTH];
 			double numBitToLoadIn = ceil(weightMatrixCol/param->numColPerSynapse)*param->numBitInput*numInVector/(netStructure[l][HAS_POOLING]? 4:1);
-			
+
 			// GhTree->CalculateLatency(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], NMTileheight, NMTilewidth, ceil((numBitToLoadOut+numBitToLoadIn)/ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile))));
-			// GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], NMTileheight, NMTilewidth, ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile)), 
+			// GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], NMTileheight, NMTilewidth, ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile)),
 								// ceil((numBitToLoadOut+numBitToLoadIn)/ceil(GhTree->busWidth*(numTileEachLayer[0][l]*numTileEachLayer[1][l]/totalNumTile))));
 			GhTree->CalculateLatency(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], NMTileheight, NMTilewidth, ceil((numBitToLoadOut+numBitToLoadIn)/GhTree->busWidth));
-			GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], NMTileheight, NMTilewidth, GhTree->busWidth, 
+			GhTree->CalculatePower(0, 0, tileLocaEachLayer[0][l], tileLocaEachLayer[1][l], NMTileheight, NMTilewidth, GhTree->busWidth,
 							ceil((numBitToLoadOut+numBitToLoadIn)/GhTree->busWidth));
 			globalBuffer->CalculateLatency(globalBuffer->interface_width, numBitToLoadOut/globalBuffer->interface_width,
 									globalBuffer->interface_width, numBitToLoadIn/globalBuffer->interface_width);
@@ -840,15 +901,15 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 			globalBuffer->writeLatency /= MIN(numBufferCore, ceil(globalBusWidth/globalBuffer->interface_width));
 			// each time, only a part of the ic is used to transfer data to a part of the tiles
 			globalBuffer->readLatency *= ceil(totalNumTile/(numTileEachLayer[0][l]*numTileEachLayer[1][l]));
-			globalBuffer->writeLatency *= ceil(totalNumTile/(numTileEachLayer[0][l]*numTileEachLayer[1][l]));	
+			globalBuffer->writeLatency *= ceil(totalNumTile/(numTileEachLayer[0][l]*numTileEachLayer[1][l]));
 		}
-	}		
+	}
 	if(!CalculateclkFreq){
 		*bufferLatency += globalBuffer->readLatency + globalBuffer->writeLatency;
 		*bufferDynamicEnergy += globalBuffer->readDynamicEnergy + globalBuffer->writeDynamicEnergy;
 		*icLatency += GhTree->readLatency;
 		*icDynamicEnergy += GhTree->readDynamicEnergy;
-		
+
 		*readLatency += globalBuffer->readLatency + globalBuffer->writeLatency + GhTree->readLatency;
 		*readDynamicEnergy += globalBuffer->readDynamicEnergy + globalBuffer->writeDynamicEnergy + GhTree->readDynamicEnergy;
 		*coreLatencyOther += globalBuffer->readLatency + globalBuffer->writeLatency + GhTree->readLatency;
@@ -861,7 +922,7 @@ double ChipCalculatePerformance(InputParameter& inputParameter, Technology& tech
 
 
 
-vector<double> TileDesignCM(double tileSize, const vector<int > &markNM, const vector<vector<double> > &netStructure, int numRowPerSynapse, int numColPerSynapse) {
+vector<double> TileDesignCM(double tileSize, const vector<int > &markNM, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse) {
 	double numTileTotal = 0;
 	double matrixTotalCM = 0;
 	double utilization = 0;
@@ -872,7 +933,7 @@ vector<double> TileDesignCM(double tileSize, const vector<int > &markNM, const v
 		}
 	}
 	utilization = matrixTotalCM/(numTileTotal*tileSize*tileSize);
-	
+
 	vector<double> tileDesignCM;
 	tileDesignCM.push_back(numTileTotal);
 	tileDesignCM.push_back(matrixTotalCM);
@@ -881,7 +942,7 @@ vector<double> TileDesignCM(double tileSize, const vector<int > &markNM, const v
 	tileDesignCM.clear();
 }
 
-vector<double> TileDesignNM(double peSize, const vector<int > &markNM, const vector<vector<double> > &netStructure, int numRowPerSynapse, int numColPerSynapse, double numPENM){
+vector<double> TileDesignNM(double peSize, const vector<int > &markNM, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse, double numPENM){
 	double numTileTotal = 0;
 	double matrixTotalNM = 0;
 	double utilization = 0;
@@ -900,7 +961,7 @@ vector<double> TileDesignNM(double peSize, const vector<int > &markNM, const vec
 	tileDesignNM.clear();
 }
 
-vector<vector<double> > PEDesign(bool Design, double peSize, double desiredTileSize, double numTileTotal, const vector<int > &markNM, const vector<vector<double> > &netStructure, int numRowPerSynapse, int numColPerSynapse) {
+vector<vector<double>> PEDesign(bool Design, double peSize, double desiredTileSize, double numTileTotal, const vector<int > &markNM, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse) {
 	double matrixTotalCM = 0;
 	double utilization = 0;
 	vector<double> peDupRow;
@@ -930,18 +991,18 @@ vector<vector<double> > PEDesign(bool Design, double peSize, double desiredTileS
 		peDupCol.push_back(actualDupCol);
 	}
 	utilization = matrixTotalCM/(numTileTotal*desiredTileSize*desiredTileSize);
-	
+
 	vector<double> matrixTotal;
 	matrixTotal.push_back(matrixTotalCM);
 	vector<double> utiliz;
 	utiliz.push_back(utilization);
-	vector<vector<double> > peDesignCM;
+	vector<vector<double>> peDesignCM;
 	peDesignCM.push_back(matrixTotal);
 	peDesignCM.push_back(utiliz);
 	matrixTotal.clear();
 	utiliz.clear();
-	
-	vector<vector<double> > peDup;
+
+	vector<vector<double>> peDup;
 	peDup.push_back(peDupRow);
 	peDup.push_back(peDupCol);
 	peDupRow.clear();
@@ -955,10 +1016,10 @@ vector<vector<double> > PEDesign(bool Design, double peSize, double desiredTileS
 	peDup.clear();
 }
 
-vector<vector<double> > SubArrayDup(double desiredPESizeCM, double desiredPESizeNM, const vector<int > &markNM, const vector<vector<double> > &netStructure, int numRowPerSynapse, int numColPerSynapse) {
+vector<vector<double>> SubArrayDup(double desiredPESizeCM, double desiredPESizeNM, const vector<int > &markNM, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse) {
 	vector<double> subArrayDupRow;
 	vector<double> subArrayDupCol;
-	
+
 	for (int i=0; i<netStructure.size(); i++) {
 		int actualDupRow = 0;
 		int actualDupCol = 0;
@@ -990,7 +1051,7 @@ vector<vector<double> > SubArrayDup(double desiredPESizeCM, double desiredPESize
 		subArrayDupRow.push_back(actualDupRow);
 		subArrayDupCol.push_back(actualDupCol);
 	}
-	vector<vector<double> > subArrayDup;
+	vector<vector<double>> subArrayDup;
 	subArrayDup.push_back(subArrayDupRow);
 	subArrayDup.push_back(subArrayDupCol);
 	subArrayDupRow.clear();
@@ -999,14 +1060,14 @@ vector<vector<double> > SubArrayDup(double desiredPESizeCM, double desiredPESize
 	subArrayDup.clear();
 }
 
-vector<vector<double> > OverallEachLayer(bool utilization, bool speedUp, const vector<vector<double> > &peDup, const vector<vector<double> > &subArrayDup, const vector<int> &pipelineSpeedUp, double desiredTileSizeCM, 
-										double desiredPESizeNM, const vector<int > &markNM, const vector<vector<double> > &netStructure, int numRowPerSynapse, int numColPerSynapse, double numPENM) {
+vector<vector<double>> OverallEachLayer(bool utilization, bool speedUp, const vector<vector<double>> &peDup, const vector<vector<double>> &subArrayDup, const vector<int> &pipelineSpeedUp, double desiredTileSizeCM,
+										double desiredPESizeNM, const vector<int > &markNM, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse, double numPENM) {
 	vector<double> numTileEachLayerRow;
 	vector<double> numTileEachLayerCol;
-	vector<vector<double> > utilizationEachLayer;	
+	vector<vector<double>> utilizationEachLayer;
 	vector<double> speedUpEachLayerRow;
 	vector<double> speedUpEachLayerCol;
-	
+
 	for (int i=0; i<netStructure.size(); i++) {
 		vector<double> utilization;
 		double numtileEachLayerRow, numtileEachLayerCol, utilizationEach;
@@ -1039,7 +1100,7 @@ vector<vector<double> > OverallEachLayer(bool utilization, bool speedUp, const v
 				numtileEachLayerCol = ceil((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredPESizeNM);
 				utilizationEach = (peDup[0][i]*peDup[1][i]*subArrayDup[0][i]*subArrayDup[1][i]*netStructure[i][IFM_CHANNEL_DEPTH]*numPENM*numRowPerSynapse*netStructure[i][KERNEL_DEPTH]
 											*numColPerSynapse)/(numtileEachLayerRow*numtileEachLayerCol*desiredPESizeNM*desiredPESizeNM*numPENM);
-				
+
 				utilization.push_back(utilizationEach);
 			} else {
 				// novel mapping
@@ -1048,7 +1109,7 @@ vector<vector<double> > OverallEachLayer(bool utilization, bool speedUp, const v
 				numtileEachLayerCol = ceil((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredPESizeNM);
 				utilizationEach = (MAX(pipelineSpeedUp[i], peDup[0][i]*peDup[1][i]*subArrayDup[0][i]*subArrayDup[1][i])*netStructure[i][IFM_CHANNEL_DEPTH]*numPENM*numRowPerSynapse*netStructure[i][KERNEL_DEPTH]
 											*numColPerSynapse)/(numtileEachLayerRow*numtileEachLayerCol*desiredPESizeNM*desiredPESizeNM*numPENM);
-				
+
 				utilization.push_back(utilizationEach);
 			}
 		}
@@ -1065,13 +1126,13 @@ vector<vector<double> > OverallEachLayer(bool utilization, bool speedUp, const v
 		utilization.clear();
 	}
 
-	vector<vector<double> > numTileEachLayer;
+	vector<vector<double>> numTileEachLayer;
 	numTileEachLayer.push_back(numTileEachLayerRow);
 	numTileEachLayer.push_back(numTileEachLayerCol);
 	numTileEachLayerRow.clear();
 	numTileEachLayerCol.clear();
-	
-	vector<vector<double> > speedUpEachLayer;
+
+	vector<vector<double>> speedUpEachLayer;
 	speedUpEachLayer.push_back(speedUpEachLayerRow);
 	speedUpEachLayer.push_back(speedUpEachLayerCol);
 	speedUpEachLayerRow.clear();
@@ -1091,55 +1152,55 @@ vector<vector<double> > OverallEachLayer(bool utilization, bool speedUp, const v
 
 
 
-vector<vector<double> > LoadInWeightData(const string &weightfile, int numRowPerSynapse, int numColPerSynapse, double maxConductance, double minConductance) {
-	
-	ifstream fileone(weightfile.c_str());                           
+vector<vector<double>> LoadInWeightData(const string &weightfile, int numRowPerSynapse, int numColPerSynapse, double maxConductance, double minConductance) {
+
+	ifstream fileone(weightfile.c_str());
 	string lineone;
 	string valone;
-	
+
 	int ROW = 0;
 	int COL = 0;
-	
-	if (!fileone.good()) {                                       
+
+	if (!fileone.good()) {
 		cerr << "Error: the fileone cannot be opened!" << endl;
 		exit(1);
 	}else{
-		while (getline(fileone, lineone, '\n')) {                   
-			ROW++;                                             
+		while (getline(fileone, lineone, '\n')) {
+			ROW++;
 		}
 		fileone.clear();
-		fileone.seekg(0, ios::beg);                               
-		if (getline(fileone, lineone, '\n')) {                      
-			istringstream iss (lineone);                         
-			while (getline(iss, valone, ',')) {                   
+		fileone.seekg(0, ios::beg);
+		if (getline(fileone, lineone, '\n')) {
+			istringstream iss (lineone);
+			while (getline(iss, valone, ',')) {
 				COL++;
 			}
-		}	
+		}
 	}
 	fileone.clear();
-	fileone.seekg(0, ios::beg);                   
-	
-	
+	fileone.seekg(0, ios::beg);
+
+
 	double NormalizedMin = 0;
 	double NormalizedMax = pow(2, param->synapseBit);
-	
+
 	double RealMax = param->algoWeightMax;
 	double RealMin = param->algoWeightMin;
-	
-	vector<vector<double> > weight;            
+
+	vector<vector<double>> weight;
 	// load the data into a weight matrix ...
-	for (int row=0; row<ROW; row++) {	
+	for (int row=0; row<ROW; row++) {
 		vector<double> weightrow;
 		vector<double> weightrowb;
-		getline(fileone, lineone, '\n');              
+		getline(fileone, lineone, '\n');
 		istringstream iss;
 		iss.str(lineone);
-		for (int col=0; col<COL; col++) {       
-			while(getline(iss, valone, ',')){	
+		for (int col=0; col<COL; col++) {
+			while(getline(iss, valone, ',')){
 				istringstream fs;
 				fs.str(valone);
 				double f=0;
-				fs >> f;	
+				fs >> f;
 				//normalize weight to integer
 				double newdata = ((NormalizedMax-NormalizedMin)/(RealMax-RealMin)*(f-RealMax)+NormalizedMax);
 				if (newdata >= 0) {
@@ -1149,9 +1210,9 @@ vector<vector<double> > LoadInWeightData(const string &weightfile, int numRowPer
 				}
 				// map and expend the weight in memory array
 				int cellrange = pow(2, param->cellBit);
-				vector<double> synapsevector(numColPerSynapse);       
-				int value = newdata; 
-				
+				vector<double> synapsevector(numColPerSynapse);
+				int value = newdata;
+
 				if (param->BNNparallelMode) {
 					if (value == 1) {
 						weightrow.push_back(maxConductance);
@@ -1169,8 +1230,8 @@ vector<vector<double> > LoadInWeightData(const string &weightfile, int numRowPer
 						weightrowb.push_back(maxConductance);
 					}
 				} else {
-					int remainder;   
-					for (int z=0; z<numColPerSynapse; z++) {   
+					int remainder;
+					for (int z=0; z<numColPerSynapse; z++) {
 						remainder = ceil((double)(value%cellrange));
 						value = ceil((double)(value/cellrange));
 						synapsevector.insert(synapsevector.begin(), remainder);
@@ -1194,16 +1255,16 @@ vector<vector<double> > LoadInWeightData(const string &weightfile, int numRowPer
 		}
 	}
 	fileone.close();
-	
+
 	return weight;
 	weight.clear();
 }
 
 
 
-vector<vector<double> > CopyArray(const vector<vector<double> > &orginal, int positionRow, int positionCol, int numRow, int numCol) {
-	
-	vector<vector<double> > copy;
+vector<vector<double>> CopyArray(const vector<vector<double>> &orginal, int positionRow, int positionCol, int numRow, int numCol) {
+
+	vector<vector<double>> copy;
 	for (int i=0; i<numRow; i++) {
 		vector<double> copyRow;
 		for (int j=0; j<numCol; j++) {
@@ -1212,16 +1273,16 @@ vector<vector<double> > CopyArray(const vector<vector<double> > &orginal, int po
 		copy.push_back(copyRow);
 		copyRow.clear();
 	}
-	
+
 	return copy;
 	copy.clear();
-} 
+}
 
 
 
-vector<vector<double> > ReshapeArray(const vector<vector<double> > &orginal, int positionRow, int positionCol, int numRow, int numCol, int numPE, int weightMatrixRow) {
-	
-	vector<vector<double> > copy;
+vector<vector<double>> ReshapeArray(const vector<vector<double>> &orginal, int positionRow, int positionCol, int numRow, int numCol, int numPE, int weightMatrixRow) {
+
+	vector<vector<double>> copy;
 
 	for (int k=0; k<numPE; k++) {
 		for (int i=0; i<numRow; i++) {
@@ -1233,54 +1294,54 @@ vector<vector<double> > ReshapeArray(const vector<vector<double> > &orginal, int
 			copyRow.clear();
 		}
 	}
-	
+
 	return copy;
 	copy.clear();
-} 
+}
 
 
 
-vector<vector<double> > LoadInInputData(const string &inputfile) {
-	
-	ifstream infile(inputfile.c_str());     
+vector<vector<double>> LoadInInputData(const string &inputfile) {
+
+	ifstream infile(inputfile.c_str());
 	string inputline;
 	string inputval;
-	
-	int ROWin=0, COLin=0;      
-	if (!infile.good()) {       
+
+	int ROWin=0, COLin=0;
+	if (!infile.good()) {
 		cerr << "Error: the input file cannot be opened!" << endl;
 		exit(1);
 	}else{
-		while (getline(infile, inputline, '\n')) {      
-			ROWin++;                               
+		while (getline(infile, inputline, '\n')) {
+			ROWin++;
 		}
 		infile.clear();
-		infile.seekg(0, ios::beg);    
-		if (getline(infile, inputline, '\n')) {        
-			istringstream iss (inputline);      
-			while (getline(iss, inputval, ',')) {       
+		infile.seekg(0, ios::beg);
+		if (getline(infile, inputline, '\n')) {
+			istringstream iss (inputline);
+			while (getline(iss, inputval, ',')) {
 				COLin++;
 			}
-		}	
+		}
 	}
 	infile.clear();
-	infile.seekg(0, ios::beg);          
+	infile.seekg(0, ios::beg);
 
-	vector<vector<double> > inputvector;              
+	vector<vector<double>> inputvector;
 	// load the data into inputvector ...
-	for (int row=0; row<ROWin; row++) {	
+	for (int row=0; row<ROWin; row++) {
 		vector<double> inputvectorrow;
 		vector<double> inputvectorrowb;
-		getline(infile, inputline, '\n');             
+		getline(infile, inputline, '\n');
 		istringstream iss;
 		iss.str(inputline);
 		for (int col=0; col<COLin; col++) {
-			while(getline(iss, inputval, ',')){	
+			while(getline(iss, inputval, ',')){
 				istringstream fs;
 				fs.str(inputval);
 				double f=0;
 				fs >> f;
-				
+
 				if (param->BNNparallelMode) {
 					if (f == 1) {
 						inputvectorrow.push_back(1);
@@ -1312,7 +1373,7 @@ vector<vector<double> > LoadInInputData(const string &inputfile) {
 	}
 	// close the input file ...
 	infile.close();
-	
+
 	return inputvector;
 	inputvector.clear();
 }
@@ -1320,9 +1381,9 @@ vector<vector<double> > LoadInInputData(const string &inputfile) {
 
 
 
-vector<vector<double> > CopyInput(const vector<vector<double> > &orginal, int positionRow, int numInputVector, int numRow) {
-	
-	vector<vector<double> > copy;
+vector<vector<double>> CopyInput(const vector<vector<double>> &orginal, int positionRow, int numInputVector, int numRow) {
+
+	vector<vector<double>> copy;
 	for (int i=0; i<numRow; i++) {
 		vector<double> copyRow;
 		for (int j=0; j<numInputVector; j++) {
@@ -1331,17 +1392,17 @@ vector<vector<double> > CopyInput(const vector<vector<double> > &orginal, int po
 		copy.push_back(copyRow);
 		copyRow.clear();
 	}
-	
+
 	return copy;
 	copy.clear();
-	
-} 
+
+}
 
 
 
-vector<vector<double> > ReshapeInput(const vector<vector<double> > &orginal, int positionRow, int numInputVector, int numRow, int numPE, int weightMatrixRow) {
-	
-	vector<vector<double> > copy;
+vector<vector<double>> ReshapeInput(const vector<vector<double>> &orginal, int positionRow, int numInputVector, int numRow, int numPE, int weightMatrixRow) {
+
+	vector<vector<double>> copy;
 
 	for (int k=0; k<numPE; k++) {
 		for (int i=0; i<numRow; i++) {
@@ -1353,18 +1414,7 @@ vector<vector<double> > ReshapeInput(const vector<vector<double> > &orginal, int
 			copyRow.clear();
 		}
 	}
-	
+
 	return copy;
 	copy.clear();
-} 
-
-
-
-
-
-
-
-
-
-
-
+}
