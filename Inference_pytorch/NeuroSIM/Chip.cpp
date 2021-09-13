@@ -175,8 +175,134 @@ void ChipDesignInitialize(InputParameter& inputParameter, Technology& tech, MemC
 	maxPool = new MaxPooling(inputParameter, tech, cell);
 }
 
+vector<vector<double>> getLayersNumTile(){
+	vector<vector<double>> numTileEachLayer;
 
-vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, bool findSpeedUp, const vector<vector<double>> &netStructure, const vector<int > &markNM,
+}
+
+vector<vector<double>> getLayersUtilization(const vector<vector<double>> &netStructure, const vector<int > &layersMapping,
+					double maxPESizeNM, double maxTileSizeCM, double numPENM, const vector<int> &pipelineSpeedUp,
+					double *desiredNumTileNM, double *desiredPESizeNM, double *desiredNumTileCM, double *desiredTileSizeCM, double *desiredPESizeCM, int *numTileRow, int *numTileCol){
+
+	int numRowPerSynapse, numColPerSynapse;
+	numRowPerSynapse = param->numRowPerSynapse;
+	numColPerSynapse = param->numColPerSynapse;
+
+	double maxUtilizationNM = 0;
+	double maxUtilizationCM = 0;
+	*desiredNumTileNM = 0;
+	*desiredPESizeNM = 0;
+	*desiredNumTileCM = 0;
+	*desiredTileSizeCM = 0;
+	*desiredPESizeCM = 0;
+	*numTileRow = 0;
+	*numTileCol = 0;
+
+	vector<vector<double>> peDup;
+	vector<vector<double>> subArrayDup;
+	vector<vector<double>> utilizationEachLayer;
+
+	if (param->mapping == NOVEL_MAPPING) {		// Novel Mapping
+		if (maxPESizeNM < 2*param->numRowSubArray) {
+			cout << "ERROR: SubArray Size is too large, which break the chip hierarchey, please decrease the SubArray size! " << endl;
+		} else {
+			/*** Tile Design ***/
+			*desiredPESizeNM = MAX(maxPESizeNM, 2*param->numRowSubArray);
+			vector<double> initialDesignNM;
+			initialDesignNM = TileDesignNM((*desiredPESizeNM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
+			*desiredNumTileNM = initialDesignNM[0];
+			for (double thisPESize = MAX(maxPESizeNM, 2*param->numRowSubArray); thisPESize> 2*param->numRowSubArray; thisPESize/=2) {
+				// for layers use novel mapping
+				double thisUtilization = 0;
+				vector<double> thisDesign;
+				thisDesign = TileDesignNM(thisPESize, layersMapping, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
+				thisUtilization = thisDesign[2];
+				if (thisUtilization > maxUtilizationNM) {
+					maxUtilizationNM = thisUtilization;
+					*desiredPESizeNM = thisPESize;
+					*desiredNumTileNM = thisDesign[0];
+				}
+			}
+			*desiredTileSizeCM = MAX(maxTileSizeCM, 4*param->numRowSubArray);
+			vector<double> initialDesignCM;
+			initialDesignCM = TileDesignCM((*desiredTileSizeCM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+			*desiredNumTileCM = initialDesignCM[0];
+			for (double thisTileSize = MAX(maxTileSizeCM, 4*param->numRowSubArray); thisTileSize > 4*param->numRowSubArray; thisTileSize/=2) {
+				// for layers use conventional mapping
+				double thisUtilization = 0;
+				vector<double> thisDesign;
+				thisDesign = TileDesignCM(thisTileSize, layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+				thisUtilization = thisDesign[2];
+				if (thisUtilization > maxUtilizationCM) {
+					maxUtilizationCM = thisUtilization;
+					*desiredTileSizeCM = thisTileSize;
+					*desiredNumTileCM = thisDesign[0];
+				}
+			}
+			*desiredPESizeCM = (*desiredTileSizeCM)/2;
+			/*** PE Design ***/
+			for (double thisPESize = (*desiredTileSizeCM)/2; thisPESize > 2*param->numRowSubArray; thisPESize/=2) {
+				// define PE Size for layers use conventional mapping
+				double thisUtilization = 0;
+				vector<vector<double>> thisDesign;
+				thisDesign = PEDesign(true, thisPESize, (*desiredTileSizeCM), (*desiredNumTileCM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+				thisUtilization = thisDesign[1][0];
+				if (thisUtilization > maxUtilizationCM) {
+					maxUtilizationCM = thisUtilization;
+					*desiredPESizeCM = thisPESize;
+				}
+			}
+			peDup = PEDesign(false, (*desiredPESizeCM), (*desiredTileSizeCM), (*desiredNumTileCM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+			/*** SubArray Duplication ***/
+			subArrayDup = SubArrayDup((*desiredPESizeCM), (*desiredPESizeNM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+			/*** Design SubArray ***/
+			utilizationEachLayer = OveralUtilizationEachLayer(peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), (*desiredPESizeNM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
+		}
+	} else {   // all Conventional Mapping
+		if (maxTileSizeCM < 4*param->numRowSubArray) {
+			cout << "ERROR: SubArray Size is too large, which break the chip hierarchey, please decrease the SubArray size! " << endl;
+		} else {
+			/*** Tile Design ***/
+			*desiredTileSizeCM = MAX(maxTileSizeCM, 4*param->numRowSubArray);
+			vector<double> initialDesign;
+			initialDesign = TileDesignCM((*desiredTileSizeCM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+			*desiredNumTileCM = initialDesign[0];
+			for (double thisTileSize = MAX(maxTileSizeCM, 4*param->numRowSubArray); thisTileSize > 4*param->numRowSubArray; thisTileSize/=2) {
+				// for layers use conventional mapping
+				double thisUtilization = 0;
+				vector<double> thisDesign;
+				thisDesign = TileDesignCM(thisTileSize, layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+				thisUtilization = thisDesign[2];
+				if (thisUtilization > maxUtilizationCM) {
+					maxUtilizationCM = thisUtilization;
+					*desiredTileSizeCM = thisTileSize;
+					*desiredNumTileCM = thisDesign[0];
+				}
+			}
+			*desiredPESizeCM = (*desiredTileSizeCM)/2;
+			/*** PE Design ***/
+			for (double thisPESize = (*desiredTileSizeCM)/2; thisPESize > 2*param->numRowSubArray; thisPESize/=2) {
+				// define PE Size for layers use conventional mapping
+				double thisUtilization = 0;
+				vector<vector<double>> thisDesign;
+				thisDesign = PEDesign(true, thisPESize, (*desiredTileSizeCM), (*desiredNumTileCM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+				thisUtilization = thisDesign[1][0];
+				if (thisUtilization > maxUtilizationCM) {
+					maxUtilizationCM = thisUtilization;
+					*desiredPESizeCM = thisPESize;
+				}
+			}
+			peDup = PEDesign(false, (*desiredPESizeCM), (*desiredTileSizeCM), (*desiredNumTileCM), layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+			/*** SubArray Duplication ***/
+			subArrayDup = SubArrayDup((*desiredPESizeCM), 0, layersMapping, netStructure, numRowPerSynapse, numColPerSynapse);
+			/*** Design SubArray ***/
+			utilizationEachLayer = OveralUtilizationEachLayer(peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), 0, layersMapping, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
+		}
+	}
+	return utilizationEachLayer;
+}
+
+vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findSpeedUp, const vector<vector<double>> &netStructure, const vector<int > &markNM,
 					double maxPESizeNM, double maxTileSizeCM, double numPENM, const vector<int> &pipelineSpeedUp,
 					double *desiredNumTileNM, double *desiredPESizeNM, double *desiredNumTileCM, double *desiredTileSizeCM, double *desiredPESizeCM, int *numTileRow, int *numTileCol) {
 
@@ -191,7 +317,6 @@ vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, boo
 	vector<vector<double>> peDup;
 	vector<vector<double>> subArrayDup;
 	vector<vector<double>> numTileEachLayer;
-	vector<vector<double>> utilizationEachLayer;
 	vector<vector<double>> speedUpEachLayer;
 
 	*desiredNumTileNM = 0;
@@ -206,7 +331,6 @@ vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, boo
 		if (maxPESizeNM < 2*param->numRowSubArray) {
 			cout << "ERROR: SubArray Size is too large, which break the chip hierarchey, please decrease the SubArray size! " << endl;
 		}else{
-
 			/*** Tile Design ***/
 			*desiredPESizeNM = MAX(maxPESizeNM, 2*param->numRowSubArray);
 			vector<double> initialDesignNM;
@@ -257,9 +381,8 @@ vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, boo
 			/*** SubArray Duplication ***/
 			subArrayDup = SubArrayDup((*desiredPESizeCM), (*desiredPESizeNM), markNM, netStructure, numRowPerSynapse, numColPerSynapse);
 			/*** Design SubArray ***/
-			numTileEachLayer = OverallEachLayer(false, false, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), (*desiredPESizeNM), markNM, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
-			utilizationEachLayer = OverallEachLayer(true, false, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), (*desiredPESizeNM), markNM, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
-			speedUpEachLayer = OverallEachLayer(false, true, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), (*desiredPESizeNM), markNM, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
+			numTileEachLayer = OverallEachLayer(false, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), (*desiredPESizeNM), markNM, netStructure, numRowPerSynapse, numColPerSynapse);
+			speedUpEachLayer = OverallEachLayer(true, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), (*desiredPESizeNM), markNM, netStructure, numRowPerSynapse, numColPerSynapse);
 		}
 	} else {   // all Conventional Mapping
 		if (maxTileSizeCM < 4*param->numRowSubArray) {
@@ -299,9 +422,8 @@ vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, boo
 			/*** SubArray Duplication ***/
 			subArrayDup = SubArrayDup((*desiredPESizeCM), 0, markNM, netStructure, numRowPerSynapse, numColPerSynapse);
 			/*** Design SubArray ***/
-			numTileEachLayer = OverallEachLayer(false, false, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), 0, markNM, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
-			utilizationEachLayer = OverallEachLayer(true, false, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), 0, markNM, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
-			speedUpEachLayer = OverallEachLayer(false, true, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), 0, markNM, netStructure, numRowPerSynapse, numColPerSynapse, numPENM);
+			numTileEachLayer = OverallEachLayer(false, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), 0, markNM, netStructure, numRowPerSynapse, numColPerSynapse);
+			speedUpEachLayer = OverallEachLayer(true, peDup, subArrayDup, pipelineSpeedUp, (*desiredTileSizeCM), 0, markNM, netStructure, numRowPerSynapse, numColPerSynapse);
 		}
 	}
 
@@ -340,8 +462,6 @@ vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, boo
 
 	if (findNumTile) {
 		return numTileEachLayer;
-	} else if (findUtilization) {
-		return utilizationEachLayer;
 	} else if (findSpeedUp) {
 		return speedUpEachLayer;
 	} else {
@@ -350,7 +470,6 @@ vector<vector<double>> ChipFloorPlan(bool findNumTile, bool findUtilization, boo
 	peDup.clear();
 	subArrayDup.clear();
 	numTileEachLayer.clear();
-	utilizationEachLayer.clear();
 	speedUpEachLayer.clear();
 }
 
@@ -1000,19 +1119,15 @@ vector<vector<double>> SubArrayDup(double desiredPESizeCM, double desiredPESizeN
 	subArrayDup.clear();
 }
 
-vector<vector<double>> OverallEachLayer(bool utilization, bool speedUp, const vector<vector<double>> &peDup, const vector<vector<double>> &subArrayDup, const vector<int> &pipelineSpeedUp, double desiredTileSizeCM,
-										double desiredPESizeNM, const vector<int > &markNM, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse, double numPENM) {
-	vector<double> numTileEachLayerRow;
-	vector<double> numTileEachLayerCol;
-	vector<vector<double>> utilizationEachLayer;
-	vector<double> speedUpEachLayerRow;
-	vector<double> speedUpEachLayerCol;
+vector<vector<double>> OveralUtilizationEachLayer(const vector<vector<double>> &peDup, const vector<vector<double>> &subArrayDup, const vector<int> &pipelineSpeedUp, double desiredTileSizeCM,
+										double desiredPESizeNM, const vector<int > &layersMapping, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse, double numPENM){
 
-	for (int i=0; i<netStructure.size(); i++) {
+	vector<vector<double>> utilizationEachLayer;
+
+	for (int i = 0; i < netStructure.size(); i++) {
 		vector<double> utilization;
 		double numtileEachLayerRow, numtileEachLayerCol, utilizationEach;
-		if (markNM[i] == 0) {
-			// conventional mapping
+		if (layersMapping[i] == CONVENTIONAL) {
 			if (!param->pipeline) {
 				// layer-by-layer process
 				numtileEachLayerRow = ceil((double) netStructure[i][IFM_CHANNEL_DEPTH]*(double) netStructure[i][KERNEL_LENGTH]*(double) netStructure[i][KERNEL_WIDTH]*(double) numRowPerSynapse/desiredTileSizeCM);
@@ -1053,9 +1168,49 @@ vector<vector<double>> OverallEachLayer(bool utilization, bool speedUp, const ve
 				utilization.push_back(utilizationEach);
 			}
 		}
+		utilizationEachLayer.push_back(utilization);
+		utilization.clear();
+	}
+
+	return utilizationEachLayer;
+	utilizationEachLayer.clear();
+}
+
+vector<vector<double>> OverallEachLayer(bool speedUp, const vector<vector<double>> &peDup, const vector<vector<double>> &subArrayDup, const vector<int> &pipelineSpeedUp, double desiredTileSizeCM,
+										double desiredPESizeNM, const vector<int > &layersMapping, const vector<vector<double>> &netStructure, int numRowPerSynapse, int numColPerSynapse) {
+	vector<double> numTileEachLayerRow;
+	vector<double> numTileEachLayerCol;
+	vector<double> speedUpEachLayerRow;
+	vector<double> speedUpEachLayerCol;
+
+	for (int i = 0; i < netStructure.size(); i++) {
+		double numtileEachLayerRow, numtileEachLayerCol;
+		if (layersMapping[i] == CONVENTIONAL) {
+			if (!param->pipeline) {
+				// layer-by-layer process
+				numtileEachLayerRow = ceil((double) netStructure[i][IFM_CHANNEL_DEPTH]*(double) netStructure[i][KERNEL_LENGTH]*(double) netStructure[i][KERNEL_WIDTH]*(double) numRowPerSynapse/desiredTileSizeCM);
+				numtileEachLayerCol = ceil((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredTileSizeCM);
+			} else {
+				// pipeline system
+				// original design
+				numtileEachLayerRow = ceil((double) netStructure[i][IFM_CHANNEL_DEPTH]*(double) netStructure[i][KERNEL_LENGTH]*(double) netStructure[i][KERNEL_WIDTH]*(double) numRowPerSynapse/desiredTileSizeCM)
+										*ceil(pipelineSpeedUp[i]/(peDup[0][i]*peDup[1][i]*subArrayDup[0][i]*subArrayDup[1][i]));
+				numtileEachLayerCol = ceil((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredTileSizeCM);
+			}
+		} else {
+			if (!param->pipeline) {
+				// novel mapping
+				numtileEachLayerRow = ceil((double) netStructure[i][IFM_CHANNEL_DEPTH]*(double) numRowPerSynapse/(double) desiredPESizeNM);
+				numtileEachLayerCol = ceil((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredPESizeNM);
+			} else {
+				// novel mapping
+				numtileEachLayerRow = ceil((double) netStructure[i][IFM_CHANNEL_DEPTH]*(double) numRowPerSynapse/(double) desiredPESizeNM)
+										*ceil(pipelineSpeedUp[i]/(peDup[0][i]*peDup[1][i]*subArrayDup[0][i]*subArrayDup[1][i]));
+				numtileEachLayerCol = ceil((double) netStructure[i][KERNEL_DEPTH]*(double) numColPerSynapse/(double) desiredPESizeNM);
+			}
+		}
 		numTileEachLayerRow.push_back(numtileEachLayerRow);
 		numTileEachLayerCol.push_back(numtileEachLayerCol);
-		utilizationEachLayer.push_back(utilization);
 		if (!param->pipeline) {
 			speedUpEachLayerRow.push_back(peDup[0][i]*subArrayDup[0][i]);
 			speedUpEachLayerCol.push_back(peDup[1][i]*subArrayDup[1][i]);
@@ -1063,7 +1218,6 @@ vector<vector<double>> OverallEachLayer(bool utilization, bool speedUp, const ve
 			speedUpEachLayerRow.push_back(peDup[0][i]*subArrayDup[0][i]*ceil(pipelineSpeedUp[i]/(peDup[0][i]*peDup[1][i]*subArrayDup[0][i]*subArrayDup[1][i])));
 			speedUpEachLayerCol.push_back(peDup[1][i]*subArrayDup[1][i]);
 		}
-		utilization.clear();
 	}
 
 	vector<vector<double>> numTileEachLayer;
@@ -1078,14 +1232,11 @@ vector<vector<double>> OverallEachLayer(bool utilization, bool speedUp, const ve
 	speedUpEachLayerRow.clear();
 	speedUpEachLayerCol.clear();
 
-	if (utilization) {
-		return utilizationEachLayer;
-	} else if (speedUp) {
+	if (speedUp) {
 		return speedUpEachLayer;
 	} else {
 		return numTileEachLayer;
 	}
-	utilizationEachLayer.clear();
 	speedUpEachLayer.clear();
 	numTileEachLayer.clear();
 }

@@ -124,19 +124,18 @@ int main(int argc, char* argv[]) {
 	vector<vector<double>> speedUpEachLayer;
 	vector<vector<double>> tileLocaEachLayer;
 
-	numTileEachLayer = ChipFloorPlan(true, false, false, netStructure, layers_mapping,
+	numTileEachLayer = ChipFloorPlan(true, false, netStructure, layers_mapping,
 					maxPESizeNM, maxTileSizeCM, numPENM, pipelineSpeedUp,
 					&desiredNumTileNM, &desiredPESizeNM, &desiredNumTileCM, &desiredTileSizeCM, &desiredPESizeCM, &numTileRow, &numTileCol);
 
-	utilizationEachLayer = ChipFloorPlan(false, true, false, netStructure, layers_mapping,
+	utilizationEachLayer = getLayersUtilization(netStructure, layers_mapping,maxPESizeNM, maxTileSizeCM, numPENM, pipelineSpeedUp,
+					&desiredNumTileNM, &desiredPESizeNM, &desiredNumTileCM, &desiredTileSizeCM, &desiredPESizeCM, &numTileRow, &numTileCol);
+
+	speedUpEachLayer = ChipFloorPlan(false, true, netStructure, layers_mapping,
 					maxPESizeNM, maxTileSizeCM, numPENM, pipelineSpeedUp,
 					&desiredNumTileNM, &desiredPESizeNM, &desiredNumTileCM, &desiredTileSizeCM, &desiredPESizeCM, &numTileRow, &numTileCol);
 
-	speedUpEachLayer = ChipFloorPlan(false, false, true, netStructure, layers_mapping,
-					maxPESizeNM, maxTileSizeCM, numPENM, pipelineSpeedUp,
-					&desiredNumTileNM, &desiredPESizeNM, &desiredNumTileCM, &desiredTileSizeCM, &desiredPESizeCM, &numTileRow, &numTileCol);
-
-	tileLocaEachLayer = ChipFloorPlan(false, false, false, netStructure, layers_mapping,
+	tileLocaEachLayer = ChipFloorPlan(false, false, netStructure, layers_mapping,
 					maxPESizeNM, maxTileSizeCM, numPENM, pipelineSpeedUp,
 					&desiredNumTileNM, &desiredPESizeNM, &desiredNumTileCM, &desiredTileSizeCM, &desiredPESizeCM, &numTileRow, &numTileCol);
 
