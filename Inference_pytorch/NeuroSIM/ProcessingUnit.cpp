@@ -268,8 +268,8 @@ vector<double> ProcessingUnitCalculateArea(SubArray *subArray, int numSubArrayRo
 }
 
 
-double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vector<double> > &newMemory, const vector<vector<double> > &oldMemory,
-											const vector<vector<double> > &inputVector,
+double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vector<double>> &newMemory, const vector<vector<double>> &oldMemory,
+											const vector<vector<double>> &inputVector,
 											int arrayDupRow, int arrayDupCol, int numSubArrayRow, int numSubArrayCol, int weightMatrixRow,
 											int weightMatrixCol, int numInVector, MemCell& cell, bool NMpe, double *readLatency, double *readDynamicEnergy, double *leakage,
 											double *bufferLatency, double *bufferDynamicEnergy, double *icLatency, double *icDynamicEnergy,
@@ -305,9 +305,9 @@ double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vecto
 
 					if ((i*param->numRowSubArray < weightMatrixRow) && (j*param->numColSubArray < weightMatrixCol) && (i*param->numRowSubArray < weightMatrixRow) ) {
 						// assign weight and input to specific subArray
-						vector<vector<double> > subArrayMemory;
+						vector<vector<double>> subArrayMemory;
 						subArrayMemory = CopySubArray(newMemory, i*param->numRowSubArray, j*param->numColSubArray, numRowMatrix, numColMatrix);
-						vector<vector<double> > subArrayInput;
+						vector<vector<double>> subArrayInput;
 						subArrayInput = CopySubInput(inputVector, i*param->numRowSubArray, numInVector, numRowMatrix);
 
 						subArrayReadLatency = 0;
@@ -380,9 +380,9 @@ double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vecto
 			*coreLatencyOther = (*coreLatencyOther)/(arrayDupRow*arrayDupCol);
 		} else {
 			// assign weight and input to specific subArray
-			vector<vector<double> > subArrayMemory;
+			vector<vector<double>> subArrayMemory;
 			subArrayMemory = CopySubArray(newMemory, 0, 0, weightMatrixRow, weightMatrixCol);
-			vector<vector<double> > subArrayInput;
+			vector<vector<double>> subArrayInput;
 			subArrayInput = CopySubInput(inputVector, 0, numInVector, weightMatrixRow);
 
 			subArrayReadLatency = 0;
@@ -441,9 +441,9 @@ double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vecto
 					int numRowMatrix = min(param->numRowSubArray, weightMatrixRow-i*param->numRowSubArray);
 					int numColMatrix = min(param->numColSubArray, weightMatrixCol-j*param->numColSubArray);
 					// assign weight and input to specific subArray
-					vector<vector<double> > subArrayMemory;
+					vector<vector<double>> subArrayMemory;
 					subArrayMemory = CopySubArray(newMemory, i*param->numRowSubArray, j*param->numColSubArray, numRowMatrix, numColMatrix);
-					vector<vector<double> > subArrayInput;
+					vector<vector<double>> subArrayInput;
 					subArrayInput = CopySubInput(inputVector, i*param->numRowSubArray, numInVector, numRowMatrix);
 
 					subArrayReadLatency = 0;
@@ -573,8 +573,8 @@ double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vecto
 }
 
 
-vector<vector<double> > CopySubArray(const vector<vector<double> > &orginal, int positionRow, int positionCol, int numRow, int numCol) {
-	vector<vector<double> > copy;
+vector<vector<double>> CopySubArray(const vector<vector<double>> &orginal, int positionRow, int positionCol, int numRow, int numCol) {
+	vector<vector<double>> copy;
 	for (int i=0; i<numRow; i++) {
 		vector<double> copyRow;
 		for (int j=0; j<numCol; j++) {
@@ -588,8 +588,8 @@ vector<vector<double> > CopySubArray(const vector<vector<double> > &orginal, int
 }
 
 
-vector<vector<double> > CopySubInput(const vector<vector<double> > &orginal, int positionRow, int numInputVector, int numRow) {
-	vector<vector<double> > copy;
+vector<vector<double>> CopySubInput(const vector<vector<double>> &orginal, int positionRow, int numInputVector, int numRow) {
+	vector<vector<double>> copy;
 	for (int i=0; i<numRow; i++) {
 		vector<double> copyRow;
 		for (int j=0; j<numInputVector; j++) {
@@ -603,7 +603,7 @@ vector<vector<double> > CopySubInput(const vector<vector<double> > &orginal, int
 }
 
 
-vector<double> GetInputVector(const vector<vector<double> > &input, int numInput, double *activityRowRead) {
+vector<double> GetInputVector(const vector<vector<double>> &input, int numInput, double *activityRowRead) {
 	vector<double> copy;
 	for (int i=0; i<input.size(); i++) {
 		double x = input[i][numInput];
@@ -624,7 +624,7 @@ vector<double> GetInputVector(const vector<vector<double> > &input, int numInput
 }
 
 
-vector<double> GetColumnResistance(const vector<double> &input, const vector<vector<double> > &weight, MemCell& cell, bool parallelRead, double resCellAccess) {
+vector<double> GetColumnResistance(const vector<double> &input, const vector<vector<double>> &weight, MemCell& cell, bool parallelRead, double resCellAccess) {
 	vector<double> resistance;
 	vector<double> conductance;
 	double columnG = 0;

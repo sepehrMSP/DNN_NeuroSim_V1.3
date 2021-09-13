@@ -180,12 +180,6 @@ int main(int argc, char* argv[]) {
 	cout << endl;
 	cout << endl;
 
-	double numComputation = 0;
-	for (int i = 0; i < netStructure.size(); i ++) {
-		numComputation += 2 * netStructure[i][IFM_LENGTH] * netStructure[i][IFM_WIDTH] * netStructure[i][IFM_CHANNEL_DEPTH] *
-							netStructure[i][KERNEL_LENGTH] * netStructure[i][KERNEL_WIDTH] * netStructure[i][KERNEL_DEPTH];
-	}
-
 	ChipInitialize(inputParameter, tech, cell, netStructure, layers_mapping, numTileEachLayer,
 					numPENM, desiredNumTileNM, desiredPESizeNM, desiredNumTileCM, desiredTileSizeCM, desiredPESizeCM, numTileRow, numTileCol);
 
@@ -469,6 +463,13 @@ int main(int argc, char* argv[]) {
 
 	cout << endl;
 	cout << "----------------------------- Performance -------------------------------" << endl;
+
+	double numComputation = 0;
+	for (int i = 0; i < netStructure.size(); i ++) {
+		numComputation += 2 * netStructure[i][IFM_LENGTH] * netStructure[i][IFM_WIDTH] * netStructure[i][IFM_CHANNEL_DEPTH] *
+							netStructure[i][KERNEL_LENGTH] * netStructure[i][KERNEL_WIDTH] * netStructure[i][KERNEL_DEPTH];
+	}
+
 	if (! param->pipeline) {
 		if(param->validated){
 			cout << "Energy Efficiency TOPS/W (Layer-by-Layer Process): " << numComputation/(chipReadDynamicEnergy*1e12+chipLeakageEnergy*1e12)/param->zeta << endl;	// post-layout energy increase, zeta = 1.23 by default

@@ -59,7 +59,7 @@ public:
 	int relaxArrayCellHeight, relaxArrayCellWidth;
 
 	mappingMethod mapping;
-	bool globalBufferType, tileBufferType, peBufferType, chipActivation, reLu, pipeline, SARADC, currentMode, validated, synchronous;
+	bool globalBufferType, tileBufferType, peBufferType, activationOutsideTile, reLu, pipeline, SARADC, currentMode, validated, synchronous;
 	int globalBufferCoreSizeRow, globalBufferCoreSizeCol, tileBufferCoreSizeRow, tileBufferCoreSizeCol;
 
 	double clkFreq, featuresize, readNoise, resistanceOn, resistanceOff, maxConductance, minConductance;
