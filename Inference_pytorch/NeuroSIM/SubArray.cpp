@@ -327,7 +327,7 @@ void SubArray::Initialize(int _numRow, int _numCol, double _unitWireRes){  //ini
 void SubArray::CalculateArea() {  //calculate layout area for total design
 	if (!initialized) {
 		cout << "[Subarray] Error: Require initialization first!" << endl;  //ensure initialization first
-	} else {  //if initialized, start to do calculation
+	} else {
 		area = 0;
 		usedArea = 0;
 		if (cell.memCellType == Type::SRAM) {
@@ -485,14 +485,45 @@ void SubArray::CalculateArea() {  //calculate layout area for total design
 				if (numReadPulse > 1) {
 					shiftAdd.CalculateArea(NULL, widthArray, NONE);
 				}
-				height = ((cell.writeVoltage > 1.5)==true? (sllevelshifter.height):0) + slSwitchMatrix.height + heightArray + ((numColMuxed > 1)==true? (mux.height):0) + multilevelSenseAmp.height + multilevelSAEncoder.height + shiftAdd.height + sarADC.height;
-				width = MAX( ((cell.writeVoltage > 1.5)==true? (wllevelshifter.width + bllevelshifter.width):0) + wlNewSwitchMatrix.width + wlSwitchMatrix.width, ((numColMuxed > 1)==true? (muxDecoder.width):0)) + widthArray;
-				usedArea = areaArray + ((cell.writeVoltage > 1.5)==true? (wllevelshifter.area + bllevelshifter.area + sllevelshifter.area):0) + wlSwitchMatrix.area + wlNewSwitchMatrix.area + slSwitchMatrix.area +
-							((numColMuxed > 1)==true? (mux.area + muxDecoder.area):0) + multilevelSenseAmp.area  + multilevelSAEncoder.area + shiftAdd.area + sarADC.area;
 
-				areaADC = multilevelSenseAmp.area + multilevelSAEncoder.area + sarADC.area;
+				if (param->mapping == NOVELCONV) {
+					ncInterconnect.CalculateArea();
+				}
+
+				height = ((cell.writeVoltage > 1.5) == true ? (sllevelshifter.height) : 0) +
+							slSwitchMatrix.height +
+							heightArray +
+							((numColMuxed > 1)==true? (mux.height):0) +
+							multilevelSenseAmp.height +
+							multilevelSAEncoder.height +
+							shiftAdd.height +
+							sarADC.height;
+
+				width = MAX(((cell.writeVoltage > 1.5)==true? (wllevelshifter.width + bllevelshifter.width):0) + wlNewSwitchMatrix.width + wlSwitchMatrix.width, ((numColMuxed > 1)==true? (muxDecoder.width):0)) +
+						 	widthArray;
+
+				usedArea = areaArray +
+							((cell.writeVoltage > 1.5)==true? (wllevelshifter.area + bllevelshifter.area + sllevelshifter.area):0) +
+							wlSwitchMatrix.area +
+							wlNewSwitchMatrix.area +
+							slSwitchMatrix.area +
+							((numColMuxed > 1)==true? (mux.area + muxDecoder.area):0) +
+							multilevelSenseAmp.area +
+							multilevelSAEncoder.area +
+							shiftAdd.area +
+							sarADC.area +
+							ncInterconnect.area;
+
+				areaADC = multilevelSenseAmp.area +
+							multilevelSAEncoder.area +
+							sarADC.area;
+
 				areaAccum = shiftAdd.area;
-				areaOther = ((cell.writeVoltage > 1.5)==true? (wllevelshifter.area + bllevelshifter.area + sllevelshifter.area):0) + wlNewSwitchMatrix.area + wlSwitchMatrix.area + slSwitchMatrix.area + ((numColMuxed > 1)==true? (mux.area + muxDecoder.area):0);
+				areaOther = ((cell.writeVoltage > 1.5)==true? (wllevelshifter.area + bllevelshifter.area + sllevelshifter.area):0) +
+							wlNewSwitchMatrix.area +
+							wlSwitchMatrix.area +
+							slSwitchMatrix.area +
+							((numColMuxed > 1)==true? (mux.area + muxDecoder.area):0);
 
 				area = height * width;
 				emptyArea = area - usedArea;
@@ -558,7 +589,6 @@ void SubArray::CalculateLatency(double columnRes, const vector<double> &columnRe
 	if (!initialized) {
 		cout << "[Subarray] Error: Require initialization first!" << endl;
 	} else {
-
 		readLatency = 0;
 		readLatencyADC = 0;
 		readLatencyAccum = 0;
@@ -1414,9 +1444,7 @@ void SubArray::CalculatePower(const vector<double> &columnResistance) {
 }
 
 void SubArray::PrintProperty() {
-
 	if (cell.memCellType == Type::SRAM) {
-
 		cout << endl << endl;
 	    cout << "Array:" << endl;
 	    cout << "Area = " << heightArray*1e6 << "um x " << widthArray*1e6 << "um = " << areaArray*1e12 << "um^2" << endl;
@@ -1458,9 +1486,7 @@ void SubArray::PrintProperty() {
 				shiftAdd.PrintProperty("shiftAdd");
 			}
 		}
-
 	} else if (cell.memCellType == Type::RRAM || cell.memCellType == Type::FeFET) {
-
 		cout << endl << endl;
 	    cout << "Array:" << endl;
 	    cout << "Area = " << heightArray*1e6 << "um x " << widthArray*1e6 << "um = " << areaArray*1e12 << "um^2" << endl;

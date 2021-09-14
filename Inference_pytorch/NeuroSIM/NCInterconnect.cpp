@@ -60,7 +60,7 @@ void NCInterconnect::Initialize() {
 	}
 }
 
-void NCInterconnect::CalculateArea(double heightArray, double widthArray, AreaModify _option) {
+void NCInterconnect::CalculateArea() {
 	if (!initialized) {
 		cout << "[SarADC] Error: Require initialization first!" << endl;
 	} else {
