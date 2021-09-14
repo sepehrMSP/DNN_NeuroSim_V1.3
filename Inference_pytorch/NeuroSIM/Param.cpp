@@ -98,13 +98,15 @@ Param::Param() {
 								* 3: isaac
 								**/
 
-	SARADC = false;              // false: MLSA
+	SARADC = true;              // false: MLSA
 	                            // true: sar ADC
+
 	currentMode = true;         // false: MLSA use VSA
 	                            // true: MLSA use CSA
 
 	pipeline = false;            // false: layer-by-layer process --> huge leakage energy in HP
 								// true: pipeline process
+
 	speedUpDegree = 8;          // 1 = no speed up --> original speed
 								// 2 and more : speed up ratio, the higher, the faster
 								// A speed-up degree upper bound: when there is no idle period during each layer --> no need to further fold the system clock
@@ -144,13 +146,16 @@ Param::Param() {
 	numRowSubArray = 128;               // # of rows in single subArray
 	numColSubArray = 128;               // # of columns in single subArray
 
+	OUC = 16;	// number of columns in a crossbar that can be ativated in a cycle
+	OUR = 16;	// number of rows in a crossbar that can be activated in a cycle
+
 	/*** option to relax subArray layout ***/
 	relaxArrayCellHeight = 0;           // relax ArrayCellHeight or not
 	relaxArrayCellWidth = 0;            // relax ArrayCellWidth or not
 
-	numColMuxed = 8;                    // How many columns share 1 ADC (for eNVM and FeFET) or parallel SRAM
-	levelOutput = 32;                   // # of levels of the multilevelSenseAmp output, should be in 2^N forms; e.g. 32 levels --> 5-bit ADC
+	numColMuxed = numColSubArray; 		// How many columns share 1 ADC (for eNVM and FeFET) or parallel SRAM
 	cellBit = 2;                        // precision of memory device
+	levelOutput = numRowSubArray * cellBit / OUR ;                   // # of levels of the multilevelSenseAmp output, should be in 2^N forms; e.g. 32 levels --> 5-bit ADC
 
 	/*** parameters for SRAM ***/
 	// due the scaling, suggested SRAM cell size above 22nm: 160F^2

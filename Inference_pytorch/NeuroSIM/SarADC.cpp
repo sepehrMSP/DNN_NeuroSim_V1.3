@@ -3,22 +3,22 @@
 * School of Electrical, Computer and Energy Engineering, Arizona State University
 * PI: Prof. Shimeng Yu
 * All rights reserved.
-* 
-* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark 
-* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory). 
-* Copyright of the model is maintained by the developers, and the model is distributed under 
-* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License 
+*
+* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark
+* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory).
+* Copyright of the model is maintained by the developers, and the model is distributed under
+* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License
 * http://creativecommons.org/licenses/by-nc/4.0/legalcode.
 * The source code is free and you can redistribute and/or modify it
 * by providing that the following conditions are met:
-* 
+*
 *  1) Redistributions of source code must retain the above copyright notice,
 *     this list of conditions and the following disclaimer.
-* 
+*
 *  2) Redistributions in binary form must reproduce the above copyright notice,
 *     this list of conditions and the following disclaimer in the documentation
 *     and/or other materials provided with the distribution.
-* 
+*
 * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,10 +29,10 @@
 * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-* 
-* Developer list: 
-*   Pai-Yu Chen	    Email: pchen72 at asu dot edu 
-*                    
+*
+* Developer list:
+*   Pai-Yu Chen	    Email: pchen72 at asu dot edu
+*
 *   Xiaochen Peng   Email: xpeng15 at asu dot edu
 ********************************************************************************/
 
@@ -52,18 +52,16 @@ SarADC::SarADC(const InputParameter& _inputParameter, const Technology& _tech, c
 	initialized = false;
 }
 
-void SarADC::Initialize(int _numCol, int _levelOutput, double _clkFreq, int _numReadCellPerOperationNeuro) {
+void SarADC::Initialize(int _numCol, int _levelOutput) {
 	if (initialized) {
 		cout << "[SarADC] Warning: Already initialized!" << endl;
     } else {
 		numCol = _numCol;
-		levelOutput = _levelOutput;                // # of bits for A/D output ... 
-		clkFreq = _clkFreq;
-		numReadCellPerOperationNeuro = _numReadCellPerOperationNeuro;
-		
+		levelOutput = _levelOutput;                // # of bits for A/D output ...
+
 		widthNmos = MIN_NMOS_SIZE * tech.featureSize;
 		widthPmos = tech.pnSizeRatio * MIN_NMOS_SIZE * tech.featureSize;
-		
+
 		initialized = true;
 	}
 }
@@ -74,10 +72,10 @@ void SarADC::CalculateUnitArea() {
 		cout << "[SarADC] Error: Require initialization first!" << endl;
 	} else {
 		double hNmos, wNmos, hPmos, wPmos;
-		
+
 		CalculateGateArea(INV, 1, widthNmos, 0, tech.featureSize*MAX_TRANSISTOR_HEIGHT, tech, &hNmos, &wNmos);
 		CalculateGateArea(INV, 1, 0, widthPmos, tech.featureSize*MAX_TRANSISTOR_HEIGHT, tech, &hPmos, &wPmos);
-		
+
 		areaUnit = (hNmos * wNmos) * (269+(log2(levelOutput)-1)*109) + (hPmos * wPmos) * (209+(log2(levelOutput)-1)*73);
 	}
 }
@@ -87,11 +85,11 @@ void SarADC::CalculateArea(double heightArray, double widthArray, AreaModify _op
 	if (!initialized) {
 		cout << "[SarADC] Error: Require initialization first!" << endl;
 	} else {
-		
+
 		area = 0;
 		height = 0;
 		width = 0;
-		
+
 		if (widthArray && _option==NONE) {
 			area = areaUnit * numCol;
 			width = widthArray;
@@ -105,7 +103,7 @@ void SarADC::CalculateArea(double heightArray, double widthArray, AreaModify _op
 			exit(-1);
 		}
 		// Assume the Current Mirrors are on the same row and the total width of them is smaller than the adder or DFF
-		
+
 		// Modify layout
 		newHeight = heightArray;
 		newWidth = widthArray;
@@ -115,11 +113,10 @@ void SarADC::CalculateArea(double heightArray, double widthArray, AreaModify _op
 				break;
 			case OVERRIDE:
 				OverrideLayout();
-				break;  
+				break;
 			default:    // NONE
 				break;
 		}
-
 	}
 }
 
@@ -145,14 +142,12 @@ void SarADC::CalculatePower(const vector<double> &columnResistance, double numRe
 			readDynamicEnergy += E_Col;
 		}
 		readDynamicEnergy *= numRead;
-		
 	}
-} 
+}
 
 void SarADC::PrintProperty(const char* str) {
 	FunctionUnit::PrintProperty(str);
 }
-
 
 double SarADC::GetColumnPower(double columnRes) {
 	double Column_Power = 0;
@@ -160,7 +155,7 @@ double SarADC::GetColumnPower(double columnRes) {
 	// in Cadence simulation, we fix Vread to 0.5V, with user-defined Vread (different from 0.5V)
 	// we should modify the equivalent columnRes
 	columnRes *= 0.5/param->readVoltage;
-	if ((double) 1/columnRes == 0) { 
+	if ((double) 1/columnRes == 0) {
 		Column_Power = 1e-6;
 	} else if (columnRes == 0) {
 		Column_Power = 0;
@@ -178,16 +173,16 @@ double SarADC::GetColumnPower(double columnRes) {
 			} else if (param->technode == 45) {
 				Column_Power = (2.1843*log2(levelOutput)+11.931)*1e-6;
 				Column_Power += 0.097754*exp(-2.296*log10(columnRes));
-			} else if (param->technode == 32){  
+			} else if (param->technode == 32){
 				Column_Power = (1.0157*log2(levelOutput)+7.6286)*1e-6;
 				Column_Power += 0.083709*exp(-2.313*log10(columnRes));
-			} else if (param->technode == 22){   
+			} else if (param->technode == 22){
 				Column_Power = (0.7213*log2(levelOutput)+3.3041)*1e-6;
 				Column_Power += 0.084273*exp(-2.311*log10(columnRes));
-			} else if (param->technode == 14){   
+			} else if (param->technode == 14){
 				Column_Power = (0.4710*log2(levelOutput)+1.9529)*1e-6;
 				Column_Power += 0.060584*exp(-2.311*log10(columnRes));
-			} else if (param->technode == 10){   
+			} else if (param->technode == 10){
 				Column_Power = (0.3076*log2(levelOutput)+1.1543)*1e-6;
 				Column_Power += 0.049418*exp(-2.311*log10(columnRes));
 			} else {   // 7nm
@@ -207,16 +202,16 @@ double SarADC::GetColumnPower(double columnRes) {
 			} else if (param->technode == 45) {
 				Column_Power = (2.1691*log2(levelOutput)+16.693)*1e-6;
 				Column_Power += 0.100225*exp(-2.303*log10(columnRes));
-			} else if (param->technode == 32){  
+			} else if (param->technode == 32){
 				Column_Power = (1.1294*log2(levelOutput)+8.8998)*1e-6;
 				Column_Power += 0.079449*exp(-2.297*log10(columnRes));
-			} else if (param->technode == 22){   
+			} else if (param->technode == 22){
 				Column_Power = (0.538*log2(levelOutput)+4.3753)*1e-6;
 				Column_Power += 0.072341*exp(-2.303*log10(columnRes));
-			} else if (param->technode == 14){   
+			} else if (param->technode == 14){
 				Column_Power = (0.3132*log2(levelOutput)+2.5681)*1e-6;
 				Column_Power += 0.061085*exp(-2.303*log10(columnRes));
-			} else if (param->technode == 10){   
+			} else if (param->technode == 10){
 				Column_Power = (0.1823*log2(levelOutput)+1.5073)*1e-6;
 				Column_Power += 0.051580*exp(-2.303*log10(columnRes));
 			} else {   // 7nm

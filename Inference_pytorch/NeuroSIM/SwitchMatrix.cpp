@@ -51,7 +51,7 @@ SwitchMatrix::SwitchMatrix(const InputParameter& _inputParameter, const Technolo
 void SwitchMatrix::Initialize(int _mode, int _numOutput, double _resTg, bool _neuro, bool _parallelWrite, double _activityRowRead, double _activityColWrite, int _numWriteCellPerOperationMemory, int _numWriteCellPerOperationNeuro, double _numWritePulse, double _clkFreq){
 	if (initialized)
 		cout << "[SwitchMatrix] Warning: Already initialized!" << endl;
-	
+
 	mode = _mode;
 	numOutput = _numOutput;
 	neuro = _neuro;
@@ -62,23 +62,23 @@ void SwitchMatrix::Initialize(int _mode, int _numOutput, double _resTg, bool _ne
 	numWriteCellPerOperationNeuro = _numWriteCellPerOperationNeuro;
 	numWritePulse = _numWritePulse;
 	clkFreq = _clkFreq;
-    
+
 	// DFF
 	dff.Initialize(numOutput, clkFreq);       // used for scan-in ...
-	
+
 	// TG  resTg = cell.resMemCellOn / numLoad * IR_DROP_TOLERANCE;
 	resTg = _resTg * IR_DROP_TOLERANCE;      // given actual TG resistance
-	
+
 	// Why use pre-defined resTg? Becasue we want to define TG resistance according to loading and performance ...
-	
+
 	widthTgN = CalculateOnResistance(tech.featureSize, NMOS, inputParameter.temperature, tech) * tech.featureSize * LINEAR_REGION_RATIO/ (resTg*2);
-	// R~(1/W), calculate actual TG width based on feature-sized TG resistance and given actual TG resistance 
-	
+	// R~(1/W), calculate actual TG width based on feature-sized TG resistance and given actual TG resistance
+
 	widthTgP = CalculateOnResistance(tech.featureSize, PMOS, inputParameter.temperature, tech) * tech.featureSize * LINEAR_REGION_RATIO/ (resTg*2);
 	// assuming resTgN = resTgP, so resTgN = resTgP = 2*resTg (connected in parallel)
-	
+
 	EnlargeSize(&widthTgN, &widthTgP, tech.featureSize*MAX_TRANSISTOR_HEIGHT, tech);
-	
+
 	initialized = true;
 }
 
@@ -102,10 +102,10 @@ void SwitchMatrix::CalculateArea(double _newHeight, double _newWidth, AreaModify
 				numTgPairPerCol = (int)ceil((double)numOutput / numColTgPair);	// Get # Tg pair per column based on this min # columns
 				TgHeight = _newHeight / numTgPairPerCol;
 				CalculateGateArea(INV, 1, widthTgN, widthTgP, TgHeight, tech, &hTg, &wTg);
-				
+
 				// DFF
 				dff.CalculateArea(_newHeight, NULL, NONE);
-				
+
 				height = _newHeight;
 				width = (wTg * 2) * numColTgPair + dff.width;
 
@@ -131,7 +131,7 @@ void SwitchMatrix::CalculateArea(double _newHeight, double _newWidth, AreaModify
 
 				// widthTgN, widthTgP and numFold can determine the height and width of each pass gate
 				CalculatePassGateArea(widthTgN, widthTgP, tech, numFold, &hTg, &wTg);
-				
+
 				// DFF
 				dff.CalculateArea(NULL, _newWidth, NONE);
 
@@ -166,7 +166,6 @@ void SwitchMatrix::CalculateArea(double _newHeight, double _newWidth, AreaModify
 		capTgGateN = CalculateGateCap(widthTgN, tech);
 		capTgGateP = CalculateGateCap(widthTgP, tech);
 		CalculateGateCapacitance(INV, 1, widthTgN, widthTgP, hTg, tech, NULL, &capTgDrain);
-		
 	}
 }
 
@@ -188,7 +187,7 @@ void SwitchMatrix::CalculateLatency(double _rampInput, double _capLoad, double _
 		capOutput = capTgDrain * 3;
 		tr = resTg * (capOutput + capLoad) + resLoad * capLoad / 2;
 		readLatency += horowitz(tr, 0, rampInput, &rampOutput);	// get from chargeLatency in the original SubArray.cpp
-		
+
 		readLatency *= numRead;
 		// readLatency += dff.readLatency;
 
@@ -202,11 +201,10 @@ void SwitchMatrix::CalculatePower(double numRead, double numWrite, double activi
 	if (!initialized) {
 		cout << "[SwitchMatrix] Error: Require initialization first!" << endl;
 	} else {
-		
 		leakage = 0;
 		readDynamicEnergy = 0;
 		writeDynamicEnergy = 0;
-		
+
 		// DFF
 		dff.CalculatePower(numRead, numOutput, false);	// Use numOutput since every DFF will pass signal (either 0 or 1)
 
@@ -225,7 +223,7 @@ void SwitchMatrix::CalculatePower(double numRead, double numWrite, double activi
 		}
 		readDynamicEnergy *= numRead;
 		readDynamicEnergy += dff.readDynamicEnergy;
-		
+
 		// Write dynamic energy (2-step write and average case half SET and half RESET)
 		if (cell.accessType == CMOS_access) {	// 1T1R
 
@@ -243,16 +241,15 @@ void SwitchMatrix::CalculatePower(double numRead, double numWrite, double activi
 				} else {    // Neuro mode
 					// LTP
 					writeDynamicEnergy += (capTgDrain * 3) * cell.writeVoltage * cell.writeVoltage * numWritePulse * MIN(numWriteCellPerOperationNeuro, numOutput*activityColWrite) / 2;   // Selected columns
-					writeDynamicEnergy += (capTgDrain * 3) * cell.writeVoltage * cell.writeVoltage * (numOutput - MIN(numWriteCellPerOperationNeuro, numOutput*activityColWrite)/2);   // Unselected columns 
+					writeDynamicEnergy += (capTgDrain * 3) * cell.writeVoltage * cell.writeVoltage * (numOutput - MIN(numWriteCellPerOperationNeuro, numOutput*activityColWrite)/2);   // Unselected columns
 					// LTD
 					writeDynamicEnergy += (capTgDrain * 3) * cell.writeVoltage * cell.writeVoltage * numWritePulse * MIN(numWriteCellPerOperationNeuro, numOutput*activityColWrite) / 2;   // Selected columns
-					
+
 					writeDynamicEnergy += (capTgGateN + capTgGateP) * tech.vdd * tech.vdd * numOutput;
 				}
 			}
 
 		} else {	// Cross-point
-			
 			if (mode == ROW_MODE) { // Connects to rows
 				if (!neuro) {    // Memory mode
 					writeDynamicEnergy += (capTgDrain * 3) * cell.writeVoltage * cell.writeVoltage;   // Selected row in SET
@@ -299,4 +296,3 @@ void SwitchMatrix::PrintProperty(const char* str) {
 void SwitchMatrix::SaveOutput(const char* str) {
 	FunctionUnit::SaveOutput(str);
 }
-

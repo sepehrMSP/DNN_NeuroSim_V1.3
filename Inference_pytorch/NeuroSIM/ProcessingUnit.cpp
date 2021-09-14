@@ -451,7 +451,7 @@ double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vecto
 					subArrayLatencyAccum = 0;
 					subArrayLatencyOther = 0;
 
-					for (int k=0; k<numInVector; k++) {                 // calculate single subArray through the total input vectors
+					for (int k = 0; k < numInVector; k++) {                 // calculate single subArray through the total input vectors
 						double activityRowRead = 0;
 						vector<double> input;
 						input = GetInputVector(subArrayInput, k, &activityRowRead);
@@ -640,6 +640,7 @@ vector<double> GetColumnResistance(const vector<double> &input, const vector<vec
 				} else {
 					totalWireResistance = (double) 1.0/weight[i][j] + (j + 1) * param->wireResistanceRow + (weight.size() - i) * param->wireResistanceCol;
 				}
+
 				if ((int) input[i] == 1) {
 					columnG += (double) 1.0/totalWireResistance;
 					activatedRow += 1 ;
@@ -669,10 +670,10 @@ vector<double> GetColumnResistance(const vector<double> &input, const vector<vec
 		}
 
 		if (cell.memCellType == Type::RRAM || cell.memCellType == Type::FeFET) {
-			if (!parallelRead) {
-				conductance.push_back((double) columnG/activatedRow);
-			} else {
+			if (parallelRead) {
 				conductance.push_back(columnG);
+			} else {
+				conductance.push_back((double) columnG/activatedRow);
 			}
 		} else {
 			conductance.push_back(columnG);

@@ -83,6 +83,8 @@ public:
 	double AR, Rho, wireLengthRow, wireLengthCol, unitLengthWireResistance, wireResistanceRow, wireResistanceCol;
 
 	double alpha, beta, gamma, delta, epsilon, zeta;
+	int OUC;
+	int OUR;
 };
 
 #endif
