@@ -58,7 +58,7 @@ public:
 	void PrintProperty(const char* str);
 	void Initialize();
 	void CalculateArea();
-	void CalculateLatency(double numRead);
+	void CalculateLatency();
 	void CalculatePower(const vector<double> &columnResistance, double numRead);
 
 	/* Properties */

@@ -67,7 +67,7 @@ void NCInterconnect::CalculateArea() {
     }
 }
 
-void NCInterconnect::CalculateLatency(double numRead) {
+void NCInterconnect::CalculateLatency() {
 	if (!initialized) {
 		cout << "[SarADC] Error: Require initialization first!" << endl;
 	} else {

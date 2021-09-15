@@ -845,6 +845,7 @@ void SubArray::CalculateLatency(double columnRes, const vector<double> &columnRe
 
 			} else if (conventionalParallel) {
 				double capBL = lengthCol * 0.2e-15/1e-6;
+				// is not used (it's 0)
 				int numWriteOperationPerRow = (int)ceil((double)numCol*activityColWrite/numWriteCellPerOperationNeuro);
 				double colRamp = 0;
 				double tau = (capCol)*(cell.resMemCellAvg/(numRow/2));
@@ -860,17 +861,24 @@ void SubArray::CalculateLatency(double columnRes, const vector<double> &columnRe
 						mux.CalculateLatency(colRamp, 0, 1);
 						muxDecoder.CalculateLatency(1e20, mux.capTgGateN*ceil(numCol/numColMuxed), mux.capTgGateP*ceil(numCol/numColMuxed), 1, 0);
 					}
+
+					if (param->mapping == CONVENTIONAL) {
+						ncInterconnect.CalculateLatency();
+					}
+
 					if (SARADC) {
 						sarADC.CalculateLatency(1);
 					} else {
 						multilevelSenseAmp.CalculateLatency(columnResistance, 1, 1);
 						multilevelSAEncoder.CalculateLatency(1e20, 1);
 					}
+
 					if (CalculateclkFreq) {
 						readLatency += MAX(wlNewSwitchMatrix.readLatency + wlSwitchMatrix.readLatency, ((numColMuxed > 1)==true? (mux.readLatency+muxDecoder.readLatency):0));
 						readLatency += colDelay;
 						readLatency += multilevelSenseAmp.readLatency;
 						readLatency += multilevelSAEncoder.readLatency;
+						readLatency += ncInterconnect.readLatency;
 						readLatency += sarADC.readLatency;
 						readLatency *= (validated==true? param->beta : 1);	// latency factor of sensing cycle, beta = 1.4 by default
 					}
