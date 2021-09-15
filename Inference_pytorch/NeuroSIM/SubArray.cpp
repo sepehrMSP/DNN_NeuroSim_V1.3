@@ -986,7 +986,6 @@ void SubArray::CalculatePower(const vector<double> &columnResistance) {
 		cout << "[Subarray] Error: Require initialization first!" << endl;
 	} else {
 		readDynamicEnergy = 0;
-		writeDynamicEnergy = 0;
 		readDynamicEnergyArray = 0;
 
 		double numReadOperationPerRow;   // average value (can be non-integer for energy calculation)
@@ -1002,7 +1001,6 @@ void SubArray::CalculatePower(const vector<double> &columnResistance) {
 			numWriteOperationPerRow = 1;
 
 		if (cell.memCellType == Type::SRAM) {
-
 			// Array leakage (assume 2 INV)
 			leakage = 0;
 			leakage += CalculateGateLeakage(INV, 1, cell.widthSRAMCellNMOS * tech.featureSize,
@@ -1262,11 +1260,17 @@ void SubArray::CalculatePower(const vector<double> &columnResistance) {
 				} else {
 					wlSwitchMatrix.CalculatePower(numColMuxed, 2*numWriteOperationPerRow*numRow*activityRowWrite, activityRowRead, activityColWrite);
 				}
+				// WARNING: why the readNum is set to 0?
 				slSwitchMatrix.CalculatePower(0, 2*numWriteOperationPerRow*numRow*activityRowWrite, activityRowRead, activityColWrite);
 				if (numColMuxed > 1) {
 					mux.CalculatePower(numColMuxed);	// Mux still consumes energy during row-by-row read
 					muxDecoder.CalculatePower(numColMuxed, 1);
 				}
+
+				if (param->mapping == NOVELCONV) {
+					ncInterconnect.CalculatePower();
+				}
+
 				if (SARADC) {
 					sarADC.CalculatePower(columnResistance, 1);
 				} else {
@@ -1320,7 +1324,6 @@ void SubArray::CalculatePower(const vector<double> &columnResistance) {
 				leakage += multilevelSenseAmp.leakage;
 				leakage += multilevelSAEncoder.leakage;
 				leakage += shiftAdd.leakage;
-
 			} else if (BNNsequentialMode || XNORsequentialMode) {
 				double numReadCells = (int)ceil((double)numCol/numColMuxed);    // similar parameter as numReadCellPerOperationNeuro, which is for SRAM
 				double numWriteCells = (int)ceil((double)numCol/*numWriteColMuxed*/);

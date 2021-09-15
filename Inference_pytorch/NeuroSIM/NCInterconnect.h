@@ -59,7 +59,7 @@ public:
 	void Initialize();
 	void CalculateArea();
 	void CalculateLatency();
-	void CalculatePower(const vector<double> &columnResistance, double numRead);
+	void CalculatePower();
 
 	/* Properties */
 	bool initialized;		/* Initialization flag */

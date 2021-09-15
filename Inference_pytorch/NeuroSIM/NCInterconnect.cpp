@@ -74,7 +74,7 @@ void NCInterconnect::CalculateLatency() {
 	}
 }
 
-void NCInterconnect::CalculatePower(const vector<double> &columnResistance, double numRead) {
+void NCInterconnect::CalculatePower() {
 	if (!initialized) {
 		cout << "[SarADC] Error: Require initialization first!" << endl;
 	} else {
