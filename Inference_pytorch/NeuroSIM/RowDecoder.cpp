@@ -3,22 +3,22 @@
 * School of Electrical, Computer and Energy Engineering, Arizona State University
 * PI: Prof. Shimeng Yu
 * All rights reserved.
-* 
-* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark 
-* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory). 
-* Copyright of the model is maintained by the developers, and the model is distributed under 
-* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License 
+*
+* This source code is part of NeuroSim - a device-circuit-algorithm framework to benchmark
+* neuro-inspired architectures with synaptic devices(e.g., SRAM and emerging non-volatile memory).
+* Copyright of the model is maintained by the developers, and the model is distributed under
+* the terms of the Creative Commons Attribution-NonCommercial 4.0 International Public License
 * http://creativecommons.org/licenses/by-nc/4.0/legalcode.
 * The source code is free and you can redistribute and/or modify it
 * by providing that the following conditions are met:
-* 
+*
 *  1) Redistributions of source code must retain the above copyright notice,
 *     this list of conditions and the following disclaimer.
-* 
+*
 *  2) Redistributions in binary form must reproduce the above copyright notice,
 *     this list of conditions and the following disclaimer in the documentation
 *     and/or other materials provided with the distribution.
-* 
+*
 * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
 * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
 * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -29,10 +29,10 @@
 * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-* 
-* Developer list: 
-*   Pai-Yu Chen	    Email: pchen72 at asu dot edu 
-*                    
+*
+* Developer list:
+*   Pai-Yu Chen	    Email: pchen72 at asu dot edu
+*
 *   Xiaochen Peng   Email: xpeng15 at asu dot edu
 ********************************************************************************/
 
@@ -54,13 +54,13 @@ RowDecoder::RowDecoder(const InputParameter& _inputParameter, const Technology& 
 void RowDecoder::Initialize(DecoderMode _mode, int _numAddrRow, bool _MUX, bool _parallel) {
 	if (initialized)
 		cout << "[Row Decoder] Warning: Already initialized!" << endl;
-	
+
 	mode = _mode;
 	numAddrRow = _numAddrRow;
 	MUX = _MUX;
 	parallel = _parallel;
 
-	if (parallel) {         // increase MUX Decoder by 8 times  
+	if (parallel) {         // increase MUX Decoder by 8 times
 	    // Use 2-bit predecoding
 	    // INV
 	    widthInvN = 8 * MIN_NMOS_SIZE * tech.featureSize;
@@ -85,12 +85,12 @@ void RowDecoder::Initialize(DecoderMode _mode, int _numAddrRow, bool _MUX, bool 
 		    numMetalConnection = numNand + (numAddrRow%2) * 2;
 	    else
 		    numMetalConnection = 0;
-	
+
 	    // Output driver INV
 	    widthDriverInvN = 8 * 3 * MIN_NMOS_SIZE * tech.featureSize;
 	    widthDriverInvP = 8 * 3 * tech.pnSizeRatio * MIN_NMOS_SIZE * tech.featureSize;
 	}
-	
+
 	else {
 	    // Use 2-bit predecoding
 	    // INV
@@ -119,7 +119,7 @@ void RowDecoder::Initialize(DecoderMode _mode, int _numAddrRow, bool _MUX, bool 
 		    numMetalConnection = numNand + (numAddrRow%2) * 2;
 	    else
 		    numMetalConnection = 0;
-	
+
 	    // Output driver INV
 	    widthDriverInvN = 2 * MIN_NMOS_SIZE * tech.featureSize;
 	    widthDriverInvP = 2 * tech.pnSizeRatio * MIN_NMOS_SIZE * tech.featureSize;
@@ -176,7 +176,7 @@ void RowDecoder::CalculateArea(double _newHeight, double _newWidth, AreaModify _
 					numInvPerCol = numInv;
 				}
 				numColInv = (int)ceil((double)numInv/numInvPerCol);
-				
+
 				height = _newHeight;
 				width = wInv * numColInv + wNand * numColNand + M3_PITCH * numMetalConnection * tech.featureSize + wNor * numColNor;
 				if (MUX) {    // Mux enable circuit (NAND + INV) + INV
@@ -195,11 +195,11 @@ void RowDecoder::CalculateArea(double _newHeight, double _newWidth, AreaModify _
 			}
 		} else {	// mode==REGULAR_COL
 			if (_newWidth && _option==NONE) {
-				
+
 				if ((wNor > _newWidth) || (wNand > _newWidth) || (wInv > _newWidth)) {
 					cout << "[Row Decoder] Error: Row Decoder width is even larger than the assigned width !" << endl;
 				}
-				
+
 				// NOR
 				numRowNor = 0;  // Number of rows of NOR
 				numNorPerRow = (int)(_newWidth/wNor);
@@ -244,6 +244,9 @@ void RowDecoder::CalculateArea(double _newHeight, double _newWidth, AreaModify _
 			}
 		}
 		area = height * width;
+		if (numAddrRow == 0) {
+			area = 0;
+		}
 
         // Modify layout
 		newHeight = _newHeight;
@@ -258,7 +261,6 @@ void RowDecoder::CalculateArea(double _newHeight, double _newWidth, AreaModify _
 			default:	// NONE
 				break;
 		}
-		
 		// Capacitance
 		// INV
 		CalculateGateCapacitance(INV, 1, widthInvN, widthInvP, hInv, tech, &capInvInput, &capInvOutput);
@@ -324,7 +326,7 @@ void RowDecoder::CalculateLatency(double _rampInput, double _capLoad1, double _c
 			if (!numNor)
 				rampOutput = rampNandOutput;
 		}
-	
+
 		// NOR (ceil(N/2) inputs)
 		if (numNor) {
 			resPullUp = CalculateOnResistance(widthNorP, PMOS, inputParameter.temperature, tech) * 2;
@@ -383,10 +385,15 @@ void RowDecoder::CalculateLatency(double _rampInput, double _capLoad1, double _c
 			writeLatency += horowitz(tr, beta, rampInvOutput, &rampOutput);
 			rampOutput = rampInvOutput;
 		}
-		
-		readLatency *= numRead;
 
+		readLatency *= numRead;
 		writeLatency *= numWrite;
+
+		if (numAddrRow == 0) {
+			readLatency = 0;
+			writeLatency = 0;
+			rampOutput = 0;
+		}
 	}
 }
 
@@ -418,31 +425,31 @@ void RowDecoder::CalculatePower(double numRead, double numWrite) {
 		readDynamicEnergy += (capInvInput + capNorInput * numNor/2) * tech.vdd * tech.vdd * (numAddrRow - (int)floor(numAddrRow/2)*2);	// If numAddrRow is odd number
 		// NAND2
 		readDynamicEnergy += (capNandOutput + capNorInput * numNor/4) * tech.vdd * tech.vdd * numNand/4;	// every (NAND * 4) group has one NAND output activated
-		
+
 		// INV
 		writeDynamicEnergy += (capInvInput + capNandInput * 2) * tech.vdd * tech.vdd * (int)floor(numAddrRow/2)*2;
 		writeDynamicEnergy += (capInvInput + capNorInput * numNor/2) * tech.vdd * tech.vdd * (numAddrRow - (int)floor(numAddrRow/2)*2);	// If numAddrRow is odd number
 		// NAND2
 		writeDynamicEnergy += (capNandOutput + capNorInput * numNor/4) * tech.vdd * tech.vdd * numNand/4;	// every (NAND * 4) group has one NAND output activated
-		
+
 		// NOR (ceil(N/2) inputs)
 		if (MUX)
 			readDynamicEnergy += (capNorOutput + capNandInput) * tech.vdd * tech.vdd;	// one NOR output activated
 		else
 			readDynamicEnergy += (capNorOutput + capInvInput) * tech.vdd * tech.vdd;	// one NOR output activated
-		
+
 		// NOR (ceil(N/2) inputs)
 		if (MUX)
 			writeDynamicEnergy += (capNorOutput + capNandInput) * tech.vdd * tech.vdd;	// one NOR output activated
 		else
 			writeDynamicEnergy += (capNorOutput + capInvInput) * tech.vdd * tech.vdd;	// one NOR output activated
-		
+
 		// Output driver or Mux enable circuit
 		if (MUX) {
 			readDynamicEnergy += (capNandOutput + capDriverInvInput) * tech.vdd * tech.vdd;
 			readDynamicEnergy += (capDriverInvOutput + capDriverInvInput) * tech.vdd * tech.vdd;
 			readDynamicEnergy += capDriverInvOutput * tech.vdd * tech.vdd;
-			
+
 			writeDynamicEnergy += (capNandOutput + capDriverInvInput) * tech.vdd * tech.vdd;
 			writeDynamicEnergy += (capDriverInvOutput + capDriverInvInput) * tech.vdd * tech.vdd;
 			writeDynamicEnergy += capDriverInvOutput * tech.vdd * tech.vdd;
@@ -452,10 +459,15 @@ void RowDecoder::CalculatePower(double numRead, double numWrite) {
 		}
 		readDynamicEnergy *= numRead;
 		writeDynamicEnergy *= numWrite;
-		
+
 		if(param->validated){
 			readDynamicEnergy *= param->epsilon; 	// switching activity of control circuits, epsilon = 0.05 by default
 		}
+	}
+	if (numAddrRow == 0) {
+		readDynamicEnergy = 0;
+		writeDynamicEnergy = 0;
+		leakage = 0;
 	}
 }
 

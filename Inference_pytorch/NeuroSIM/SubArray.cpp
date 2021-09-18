@@ -862,7 +862,7 @@ void SubArray::CalculateLatency(double columnRes, const vector<double> &columnRe
 						muxDecoder.CalculateLatency(1e20, mux.capTgGateN*ceil(numCol/numColMuxed), mux.capTgGateP*ceil(numCol/numColMuxed), 1, 0);
 					}
 
-					if (param->mapping == CONVENTIONAL) {
+					if (param->mapping == NOVELCONV) {
 						ncInterconnect.CalculateLatency();
 					}
 

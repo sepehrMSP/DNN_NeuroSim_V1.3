@@ -54,7 +54,7 @@ NCInterconnect::NCInterconnect(const InputParameter& _inputParameter, const Tech
 
 void NCInterconnect::Initialize() {
 	if (initialized) {
-		cout << "[SarADC] Warning: Already initialized!" << endl;
+		cout << "[ncInterconnect] Warning: Already initialized!" << endl;
     } else {
 		initialized = true;
 	}
@@ -62,21 +62,21 @@ void NCInterconnect::Initialize() {
 
 void NCInterconnect::CalculateArea() {
 	if (!initialized) {
-		cout << "[SarADC] Error: Require initialization first!" << endl;
+		cout << "[ncInterconnect] Error: Require initialization first!" << endl;
 	} else {
     }
 }
 
 void NCInterconnect::CalculateLatency() {
 	if (!initialized) {
-		cout << "[SarADC] Error: Require initialization first!" << endl;
+		cout << "[ncInterconnect] Error: Require initialization first!" << endl;
 	} else {
 	}
 }
 
 void NCInterconnect::CalculatePower() {
 	if (!initialized) {
-		cout << "[SarADC] Error: Require initialization first!" << endl;
+		cout << "[ncInterconnect] Error: Require initialization first!" << endl;
 	} else {
 	}
 }

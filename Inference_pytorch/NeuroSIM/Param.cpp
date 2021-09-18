@@ -91,7 +91,7 @@ Param::Param() {
 	reLu = true;                // false: sigmoid
 								// true: reLu
 
-	mapping = CONVENTIONAL;		/**
+	mapping = NOVEL_MAPPING;		/**
 								* 0: conventional mapping
 								* 1: novel mapping
 								* 2: novelconv

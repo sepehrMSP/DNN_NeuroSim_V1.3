@@ -42,10 +42,11 @@
 #include "Technology.h"
 #include "MemCell.h"
 #include "SubArray.h"
+#include "Param.h"
 
 /*** Functions ***/
-void ProcessingUnitInitialize(SubArray *& subArray, InputParameter& inputParameter, Technology& tech, MemCell& cell, int _numSubArrayRowNM, int _numSubArrayColNM, int _numSubArrayRowCM, int _numSubArrayColCM);
-vector<double> ProcessingUnitCalculateArea(SubArray *subArray, int numSubArrayRow, int numSubArrayCol, bool NMpe, double *height, double *width, double *bufferArea);
+void ProcessingUnitInitialize(SubArray *& subArray, InputParameter& inputParameter, Technology& tech, MemCell& cell, int _numSubArrayRow, int _numSubArrayCol);
+vector<double> ProcessingUnitCalculateArea(SubArray *subArray, int numSubArrayRow, int numSubArrayCol, mappingMethod mapping, double *height, double *width, double *bufferArea);
 double ProcessingUnitCalculatePerformance(SubArray *subArray, const vector<vector<double>> &newMemory, const vector<vector<double>> &oldMemory, const vector<vector<double>> &inputVector,
 										int arrayDupRow, int arrayDupCol, int numSubArrayRow, int numSubArrayCol, int weightMatrixRow, int weightMatrixCol,
 										int numInVector, MemCell& cell, bool NMpe, double *readLatency, double *readDynamicEnergy, double *leakage,

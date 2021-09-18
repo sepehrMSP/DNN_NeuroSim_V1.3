@@ -98,7 +98,7 @@ void TileInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 	}
 
 	/*** Parameters ***/
-	double numPENM, peSizeNM, numPECM, peSizeCM, numSubArrayNM, numSubArrayCM;
+	double numPENM, peSizeNM, numPECM, peSizeCM, numSubArray;
 	int numRowPerSynapse, numColPerSynapse;
 
 	numPECM = _numPECM;
@@ -109,10 +109,13 @@ void TileInitialize(InputParameter& inputParameter, Technology& tech, MemCell& c
 	numColPerSynapse = param->numColPerSynapse;
 
 	/*** Initialize ProcessingUnit ***/
-	numSubArrayNM = ceil((double)peSizeNM/(double)param->numRowSubArray)*ceil((double)peSizeNM/(double)param->numColSubArray);
-	numSubArrayCM = ceil((double)peSizeCM/(double)param->numRowSubArray)*ceil((double)peSizeCM/(double)param->numColSubArray);
+	if (param->mapping == NOVEL_MAPPING) {
+		numSubArray = ceil((double)peSizeNM/(double)param->numRowSubArray)*ceil((double)peSizeNM/(double)param->numColSubArray);
+	} else if (param-> mapping == CONVENTIONAL) {
+		numSubArray = ceil((double)peSizeCM/(double)param->numRowSubArray)*ceil((double)peSizeCM/(double)param->numColSubArray);
+	}
 
-	ProcessingUnitInitialize(subArrayInPE, inputParameter, tech, cell, ceil(sqrt(numSubArrayNM)), ceil(sqrt(numSubArrayNM)), ceil(sqrt(numSubArrayCM)), ceil(sqrt(numSubArrayCM)));
+	ProcessingUnitInitialize(subArrayInPE, inputParameter, tech, cell, ceil(sqrt(numSubArray)), ceil(sqrt(numSubArray)));
 
 	if (param->mapping == NOVEL_MAPPING) {
 		if (param->parallelRead) {
@@ -254,7 +257,7 @@ vector<double> TileCalculateArea(double numPE, double peSize, bool NMTile, doubl
 
 	if (NMTile) {
 		int numSubArray = ceil((double) peSize/(double) param->numRowSubArray)*ceil((double) peSize/(double) param->numColSubArray);
-		peAreaResults = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), true, &PEheight, &PEwidth, &PEbufferArea);
+		peAreaResults = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), NOVEL_MAPPING, &PEheight, &PEwidth, &PEbufferArea);
 		double PEarea = peAreaResults[0];
 		double PEareaADC = peAreaResults[1];
 		double PEareaAccum = peAreaResults[2];
@@ -292,7 +295,7 @@ vector<double> TileCalculateArea(double numPE, double peSize, bool NMTile, doubl
 		areaResults.push_back(PEareaArray*numPE);
 	} else {
 		int numSubArray = ceil((double) peSize/(double) param->numRowSubArray)*ceil((double) peSize/(double) param->numColSubArray);
-		peAreaResults = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), false, &PEheight, &PEwidth, &PEbufferArea);
+		peAreaResults = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), CONVENTIONAL, &PEheight, &PEwidth, &PEbufferArea);
 		double PEarea = peAreaResults[0];
 		double PEareaADC = peAreaResults[1];
 		double PEareaAccum = peAreaResults[2];
@@ -540,7 +543,7 @@ void TileCalculatePerformance(const vector<vector<double>> &newMemory, const vec
 			double PEheight, PEwidth, PEbufferArea;
 			int numSubArray = ceil((double) peSize/(double) param->numRowSubArray)*ceil((double) peSize/(double) param->numColSubArray);
 			vector<double> PEarea;
-			PEarea = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), false, &PEheight, &PEwidth, &PEbufferArea);
+			PEarea = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), CONVENTIONAL, &PEheight, &PEwidth, &PEbufferArea);
 			hTreeCM->CalculateLatency(NULL, NULL, NULL, NULL, PEheight, PEwidth, (numBitToLoadOut+numBitToLoadIn)/hTreeCM->busWidth);
 			hTreeCM->CalculatePower(NULL, NULL, NULL, NULL, PEheight, PEwidth, hTreeCM->busWidth, (numBitToLoadOut+numBitToLoadIn)/hTreeCM->busWidth);
 			*readLatency += hTreeCM->readLatency;
@@ -648,7 +651,7 @@ void TileCalculatePerformance(const vector<vector<double>> &newMemory, const vec
 			double PEheight, PEwidth, PEbufferArea;
 			int numSubArray = ceil((double) peSize/(double) param->numRowSubArray)*ceil((double) peSize/(double) param->numColSubArray);
 			vector<double> PEarea;
-			PEarea = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), true, &PEheight, &PEwidth, &PEbufferArea);
+			PEarea = ProcessingUnitCalculateArea(subArrayInPE, ceil((double)sqrt((double)numSubArray)), ceil((double)sqrt((double)numSubArray)), NOVEL_MAPPING, &PEheight, &PEwidth, &PEbufferArea);
 			hTreeNM->CalculateLatency(0, 0, 1, 1, PEheight, PEwidth, (numBitToLoadOut+numBitToLoadIn)/hTreeNM->busWidth);
 			hTreeNM->CalculatePower(0, 0, 1, 1, PEheight, PEwidth, hTreeNM->busWidth, (numBitToLoadOut+numBitToLoadIn)/hTreeNM->busWidth);
 
